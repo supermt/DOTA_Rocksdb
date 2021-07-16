@@ -127,10 +127,6 @@ class CompactionPicker {
   bool IsLevel0CompactionInProgress() const {
     return !level0_compactions_in_progress_.empty();
   }
-  bool IsAllInOneCompactionInProgress() const {
-    return !all_in_one_compaction_in_progress.empty();
-  }
-
   // Return true if the passed key range overlap with a compaction output
   // that is currently running.
   bool RangeOverlapWithCompaction(const Slice& smallest_user_key,
@@ -203,13 +199,6 @@ class CompactionPicker {
   bool GetOverlappingL0Files(VersionStorageInfo* vstorage,
                              CompactionInputFiles* start_level_inputs,
                              int output_level, int* parent_index);
-  int GetScheduleAllInOneCompaction() { return scheduled_all_in_one_num; }
-
-  std::pair<int, uint64_t> getLastScheduledL2Compaction() {
-    std::pair<int, uint64_t> result = std::pair<int, uint64_t>(
-        scheduled_all_in_one_num, l2_moment_map[scheduled_all_in_one_num]);
-    return result;
-  };
   // Register this compaction in the set of running compactions
   void RegisterCompaction(Compaction* c);
 
@@ -241,9 +230,6 @@ class CompactionPicker {
   // Keeps track of all compactions that are running.
   // Protected by DB mutex
   std::unordered_set<Compaction*> compactions_in_progress_;
-  std::unordered_set<Compaction*> all_in_one_compaction_in_progress;
-  std::map<int, uint64_t> l2_moment_map;
-  int scheduled_all_in_one_num = 0;
   const InternalKeyComparator* const icmp_;
 };
 

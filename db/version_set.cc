@@ -2447,12 +2447,9 @@ void VersionStorageInfo::ComputeCompactionScore(
         }
 
       } else {
-        // Level-based and Gear Compaction
         score = static_cast<double>(num_sorted_runs) /
                 mutable_cf_options.level0_file_num_compaction_trigger;
-        if ((compaction_style_ == kCompactionStyleLevel ||
-             compaction_style_ == kCompactionStyleGear) &&
-            num_levels() > 1) {
+        if (compaction_style_ == kCompactionStyleLevel && num_levels() > 1) {
           // Level-based involves L0->L0 compactions that can lead to oversized
           // L0 files. Take into account size as well to avoid later giant
           // compactions to the base level.
@@ -2643,15 +2640,7 @@ void VersionStorageInfo::AddFile(int level, FileMetaData* f, Logger* info_log) {
             f2->largest.DebugString(true).c_str());
       LogFlush(info_log);
     }
-    if (this->compaction_style_ == kCompactionStyleGear) {
-      // using the gear compaction, which allows the overlapping files.
-      Warn(info_log,
-           "Using Gear compaction, this compaction style allows overlapping");
-      LogFlush(info_log);
-      assert(true);
-    } else {
-      assert(false);
-    }
+    assert(false);
   }
 #else
   (void)info_log;
@@ -2691,8 +2680,7 @@ void VersionStorageInfo::AddBlobFile(
 void VersionStorageInfo::SetFinalized() {
   finalized_ = true;
 #ifndef NDEBUG
-  if (compaction_style_ != kCompactionStyleLevel ||
-      compaction_style_ != kCompactionStyleGear) {
+  if (compaction_style_ != kCompactionStyleLevel) {
     // Not level based compaction.
     return;
   }

@@ -313,15 +313,15 @@ void ThreadPoolImpl::Impl::BGThreadWrapper(void* arg) {
       thread_type = ThreadStatus::HIGH_PRIORITY;
       break;
     // add by jinghuan
-    case Env::L1:
-      thread_type = ThreadStatus::L1;
-      break;
-    case Env::DEEP_COMPACT:
-      thread_type = ThreadStatus::DEEP_COMPACT;
-      break;
-    case Env::L0:
-      thread_type = ThreadStatus::L0;
-      break;
+    //    case Env::L1:
+    //      thread_type = ThreadStatus::L1;
+    //      break;
+    //    case Env::DEEP_COMPACT:
+    //      thread_type = ThreadStatus::DEEP_COMPACT;
+    //      break;
+    //    case Env::L0:
+    //      thread_type = ThreadStatus::L0;
+    //      break;
     case Env::Priority::LOW:
       thread_type = ThreadStatus::LOW_PRIORITY;
       break;

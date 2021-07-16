@@ -17,7 +17,6 @@
 
 #include "db/compaction/compaction_picker.h"
 #include "db/compaction/compaction_picker_fifo.h"
-#include "db/compaction/compaction_picker_gear.h"
 #include "db/compaction/compaction_picker_level.h"
 #include "db/compaction/compaction_picker_universal.h"
 #include "db/db_impl/db_impl.h"
@@ -226,11 +225,6 @@ ColumnFamilyOptions SanitizeOptions(const ImmutableDBOptions& db_options,
       db_options.allow_ingest_behind && result.num_levels < 3) {
     result.num_levels = 3;
   }
-//  if (result.compaction_style == kCompactionStyleGear) {
-//    //add by jinghuan, set the
-//    //TODO: remove it.
-//    result.num_levels = 3;
-//  }
 
   if (result.max_write_buffer_number < 2) {
     result.max_write_buffer_number = 2;
@@ -560,9 +554,6 @@ ColumnFamilyData::ColumnFamilyData(
     } else if (ioptions_.compaction_style == kCompactionStyleUniversal) {
       compaction_picker_.reset(
           new UniversalCompactionPicker(ioptions_, &internal_comparator_));
-    } else if (ioptions_.compaction_style == kCompactionStyleGear) {
-      compaction_picker_.reset(
-          new GearCompactionPicker(ioptions_, &internal_comparator_));
     } else if (ioptions_.compaction_style == kCompactionStyleFIFO) {
       compaction_picker_.reset(
           new FIFOCompactionPicker(ioptions_, &internal_comparator_));

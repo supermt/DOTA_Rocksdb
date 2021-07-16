@@ -97,10 +97,6 @@ const char* GetCompactionReasonString(CompactionReason compaction_reason) {
       return "ExternalSstIngestion";
     case CompactionReason::kPeriodicCompaction:
       return "PeriodicCompaction";
-    case CompactionReason::kGearCompactionAllInOne:
-      return "GearCompactionAllInOne";
-    case CompactionReason::kGearCollectTiered:
-      return "GearCollectTiered";
     case CompactionReason::kNumOfReasons:
       // fall through
     default:
@@ -726,17 +722,17 @@ Status CompactionJob::Install(const MutableCFOptions& mutable_cf_options) {
   ColumnFamilyData* cfd = compact_->compaction->column_family_data();
 
   // add by jinghuan, mutable compaction thread priority
-  if (mutable_cf_options.mutable_compaction_thread_prior) {
-    if (compact_->compaction->output_level() == 0) {
-      // l0 compaction, time costly, won't even clean up spaces, with lower pri
-      thread_pri_ = Env::Priority::HIGH;
-    } else if (compact_->compaction->output_level() == 1) {
-      thread_pri_ = Env::Priority::L1;
-    } else {
-      thread_pri_ = Env::Priority::LOW;
-    }
-  }
-
+  //  if (mutable_cf_options.mutable_compaction_thread_prior) {
+  //    if (compact_->compaction->output_level() == 0) {
+  //      // l0 compaction, time costly, won't even clean up spaces, with lower
+  //      pri thread_pri_ = Env::Priority::HIGH;
+  //    } else if (compact_->compaction->output_level() == 1) {
+  //      thread_pri_ = Env::Priority::L1;
+  //    } else {
+  //      thread_pri_ = Env::Priority::LOW;
+  //    }
+  //  }
+  thread_pri_ = Env::Priority::LOW;
   cfd->internal_stats()->AddCompactionStats(
       compact_->compaction->output_level(), thread_pri_, compaction_stats_);
 
@@ -1554,16 +1550,6 @@ Status CompactionJob::OpenCompactionOutputFile(
     out.finished = false;
     // add by jinghuan, if this is a kCompactionAllInOne, change the l2position
     //    out.meta.l2_position = -1;
-    auto reason = compact_->compaction->compaction_reason();
-    if (reason == CompactionReason::kGearCompactionAllInOne) {
-      out.meta.l2_position = VersionStorageInfo::l2_large_tree_index;
-    } else if (reason == CompactionReason::kGearCollectTiered) {
-      // only update when the files are write to the last level
-      if (compact_->compaction->output_level() ==
-          cfd->current()->storage_info()->num_levels() - 1) {
-        out.meta.l2_position = VersionStorageInfo::l2_small_tree_index;
-      }
-    }
 
     sub_compact->outputs.push_back(out);
   }

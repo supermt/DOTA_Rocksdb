@@ -87,12 +87,12 @@ std::string Env::PriorityToString(Env::Priority priority) {
       return "Bottom";
     case Env::Priority::LOW:
       return "Low";
-    case L0:
-      return "L0";
-    case DEEP_COMPACT:
-      return "Deep Compaction";
-    case L1:
-      return "L1 Compaction";
+      //    case L0:
+      //      return "L0";
+      //    case DEEP_COMPACT:
+      //      return "Deep Compaction";
+      //    case L1:
+      //      return "L1 Compaction";
     case Env::Priority::HIGH:
       return "High";
     case Env::Priority::USER:

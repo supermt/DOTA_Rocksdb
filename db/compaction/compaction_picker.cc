@@ -1042,10 +1042,6 @@ void CompactionPicker::RegisterCompaction(Compaction* c) {
       ioptions_.compaction_style == kCompactionStyleUniversal) {
     level0_compactions_in_progress_.insert(c);
   }
-  if (c->compaction_reason() == CompactionReason::kGearCompactionAllInOne) {
-    all_in_one_compaction_in_progress.insert(c);
-    scheduled_all_in_one_num++;
-  }
   compactions_in_progress_.insert(c);
 }
 
@@ -1056,9 +1052,6 @@ void CompactionPicker::UnregisterCompaction(Compaction* c) {
   if (c->start_level() == 0 ||
       ioptions_.compaction_style == kCompactionStyleUniversal) {
     level0_compactions_in_progress_.erase(c);
-  }
-  if (c->compaction_reason() == CompactionReason::kGearCompactionAllInOne) {
-    all_in_one_compaction_in_progress.erase(c);
   }
   compactions_in_progress_.erase(c);
 }

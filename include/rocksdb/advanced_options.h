@@ -31,13 +31,10 @@ enum CompactionStyle : char {
   // FIFO compaction style
   // Not supported in ROCKSDB_LITE
   kCompactionStyleFIFO = 0x2,
-  // Gear compaction style from HUAWEI
-  // Not supported in ROCKSDB_LITE
-  kCompactionStyleGear = 0x3,
   // Disable background compaction. Compaction jobs are submitted
   // via CompactFiles().
   // Not supported in ROCKSDB_LITE
-  kCompactionStyleNone = 0x4,
+  kCompactionStyleNone = 0x3,
 };
 
 // In Level-based compaction, it Determines which file from a level to be
