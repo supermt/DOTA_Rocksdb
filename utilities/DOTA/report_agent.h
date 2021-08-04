@@ -9,6 +9,7 @@
 #include <cinttypes>
 #include <condition_variable>
 #include <cstddef>
+#include <iostream>
 #include <iterator>
 #include <memory>
 #include <mutex>
@@ -19,49 +20,6 @@
 #include <unordered_map>
 
 #include "db/db_impl/db_impl.h"
-#include "db/malloc_stats.h"
-#include "db/version_set.h"
-#include "hdfs/env_hdfs.h"
-#include "monitoring/histogram.h"
-#include "monitoring/statistics.h"
-#include "options/cf_options.h"
-#include "port/port.h"
-#include "port/stack_trace.h"
-#include "rocksdb/cache.h"
-#include "rocksdb/db.h"
-#include "rocksdb/env.h"
-#include "rocksdb/filter_policy.h"
-#include "rocksdb/memtablerep.h"
-#include "rocksdb/options.h"
-#include "rocksdb/perf_context.h"
-#include "rocksdb/persistent_cache.h"
-#include "rocksdb/rate_limiter.h"
-#include "rocksdb/slice.h"
-#include "rocksdb/slice_transform.h"
-#include "rocksdb/stats_history.h"
-#include "rocksdb/utilities/object_registry.h"
-#include "rocksdb/utilities/optimistic_transaction_db.h"
-#include "rocksdb/utilities/options_util.h"
-#include "rocksdb/utilities/sim_cache.h"
-#include "rocksdb/utilities/transaction.h"
-#include "rocksdb/utilities/transaction_db.h"
-#include "rocksdb/write_batch.h"
-#include "test_util/testutil.h"
-#include "test_util/transaction_test_util.h"
-#include "util/cast_util.h"
-#include "util/compression.h"
-#include "util/crc32c.h"
-#include "util/gflags_compat.h"
-#include "util/mutexlock.h"
-#include "util/random.h"
-#include "util/stderr_logger.h"
-#include "util/string_util.h"
-#include "util/xxhash.h"
-#include "utilities/blob_db/blob_db.h"
-#include "utilities/merge_operators.h"
-#include "utilities/merge_operators/bytesxor.h"
-#include "utilities/merge_operators/sortlist.h"
-#include "utilities/persistent_cache/block_cache_tier.h"
 
 namespace ROCKSDB_NAMESPACE {
 
@@ -77,12 +35,14 @@ struct ChangePoint {
   std::string value;
   int change_timing;
 };
+
 class ReporterAgent {
  private:
   std::string header_string_;
 
  public:
   static std::string Header() { return "secs_elapsed,interval_qps"; }
+
   ReporterAgent(Env* env, const std::string& fname,
                 uint64_t report_interval_secs,
                 std::string header_string = Header())
@@ -129,8 +89,10 @@ class ReporterAgent {
   // will notify on stop
   std::condition_variable stop_cv_;
   bool stop_;
+  uint64_t time_started;
+
   void SleepAndReport() {
-    auto time_started = env_->NowMicros();
+    time_started = env_->NowMicros();
     while (true) {
       {
         std::unique_lock<std::mutex> lk(mutex_);
@@ -167,11 +129,24 @@ class ReporterAgent {
     }
   }
 };
+// class QuicksandMetricAgent : public ReporterAgent {
+//  private:
+//   std::vector<std::pair<uint64_t, double>> LSM_CPU_ratio;
+//   std::vector<std::pair<uint64_t, double>> L0_overlapping_ratio;
+//   std::vector<std::pair<uint64_t, int>> L0_nums;
+//   std::vector<std::pair<uint64_t, double>> disk_bandwidth;
+//
+//   std::string QuicksandMetricAgentHeader() const {
+//
+//     return "secs_elapsed,interval_qps";
+//   }
+// };
 
 class ReporterAgentWithTuning : public ReporterAgent {
  private:
   std::vector<ChangePoint> tuning_points;
   DBImpl* running_db_;
+  uint64_t last_report_micro;
   std::string DOTAHeader() const {
     return "secs_elapsed,interval_qps,batch_size";
   }
@@ -184,7 +159,6 @@ class ReporterAgentWithTuning : public ReporterAgent {
       : ReporterAgent(env, fname, report_interval_secs, DOTAHeader()) {
     tuning_points = std::vector<ChangePoint>();
     tuning_points.clear();
-
     std::cout << "using reporter agent with change points." << std::endl;
     if (running_db == nullptr) {
       std::cout << "Missing parameter db_ to apply changes" << std::endl;
@@ -192,22 +166,6 @@ class ReporterAgentWithTuning : public ReporterAgent {
     } else {
       running_db_ = running_db;
     }
-  }
-
-  void ApplyChangePoint(ChangePoint point) {
-    //    //    db_.db->GetDBOptions();
-    //    FLAGS_env->SleepForMicroseconds(point->change_timing * 1000000l);
-    //    sleep(point->change_timing);
-    std::unordered_map<std::string, std::string> new_options = {
-        {point.opt, point.value}};
-    Status s = running_db_->SetOptions(new_options);
-    auto is_ok = s.ok() ? "suc" : "failed";
-    std::cout << "Set " << point.opt + "=" + point.value + " " + is_ok
-              << " after " << point.change_timing << " seconds running"
-              << std::endl;
-  }
-  void InsertNewTuningPoints(ChangePoint point) {
-    tuning_points.push_back(point);
   }
   const std::string memtable_size = "write_buffer_size";
   const std::string table_size = "target_file_size_base";
@@ -217,95 +175,13 @@ class ReporterAgentWithTuning : public ReporterAgent {
 
   const float threashold = 0.5;
 
-  bool reach_lsm_double_line(size_t sec_elpased, Options* opt) {
-    int counter[history_lsm_shape] = {0};
-    for (LSM_STATE shape : shape_list) {
-      int max_level = 0;
-      int max_score = -1;
-      unsigned long len = shape.size();
-      for (unsigned long i = 0; i < len; i++) {
-        if (shape[i] > max_score) {
-          max_score = shape[i];
-          max_level = i;
-          if (shape[i] == 0) break;  // there is no file in this level
-        }
-      }
-      //      std::cout << "max level is " << max_level << std::endl;
-      counter[max_level]++;
-    }
-    ChangePoint point;
-    for (unsigned long i = 0; i < history_lsm_shape; i++) {
-      if (counter[i] > threashold * history_lsm_shape) {
-        //        std::cout << "Apply changes due to crowded level  " << i <<
-        //        std::endl;
-        // for in each detect window, it suppose to happen a lot of single level
-        // compaction, but we need to start with level 2, since level 1 is much
-        // to common
-        if (i <= 1) {
-          if (opt->write_buffer_size > 4 * default_memtable_size) {
-            point.change_timing = sec_elpased + history_lsm_shape / 10;
-            point.opt = memtable_size;
-            point.value = ToString(default_memtable_size);
-            tuning_points.push_back(point);
-            point.opt = table_size;
-            tuning_points.push_back(point);
-            report_file_->Append("," + point.opt + "," + point.value);
-          }
-        } else if (opt->write_buffer_size <= default_memtable_size * 8) {
-          point.change_timing = sec_elpased + history_lsm_shape / 10;
-          point.opt = memtable_size;
-          point.value = ToString(opt->write_buffer_size * 2);
-          tuning_points.push_back(point);
-          point.opt = table_size;
-          tuning_points.push_back(point);
-          report_file_->Append("," + point.opt + "," + point.value);
-        }
-
-        return true;
-      }
-    }
-    return false;
+  void ApplyChangePoint(ChangePoint point);
+  void InsertNewTuningPoints(ChangePoint point) {
+    tuning_points.push_back(point);
   }
+  bool reach_lsm_double_line(size_t sec_elapsed, Options* opt);
 
-  void Detect(int sec_elpased) {
-    //    auto qps = total_ops_done_.load() - last_report_;
-    //    int db_size = 64;
-    //    auto slow_down_trigger = opt.level0_slowdown_writes_trigger;
-    DBImpl* dbfull = running_db_;
-    VersionSet* test = dbfull->GetVersionSet();
-
-    Options opt = running_db_->GetOptions();
-    auto cfd = test->GetColumnFamilySet()->GetDefault();
-    auto vstorage = cfd->current()->storage_info();
-    LSM_STATE temp;
-    for (int i = 0; i < vstorage->num_levels(); i++) {
-      double score = vstorage->CompactionScore(i);
-      temp.push_back(score);
-    }
-    if (shape_list.size() > history_lsm_shape) {
-      shape_list.pop_front();
-    }
-    shape_list.push_back(temp);
-    //    std::cout << "shape list pushed in with length " << temp.size()
-    //              << std::endl;
-    reach_lsm_double_line(sec_elpased, &opt);
-    //    LSM_STATE temp;
-    //
-    //    for (int level = 0; level < vstorage->num_levels(); ++level) {
-    //      temp.push_back(vstorage->NumLevelFiles(level));
-    //    }
-    //
-    //    if (shape_list.size() > history_lsm_shape) {
-    //      shape_list.pop_front();
-    //    }
-    //    shape_list.push_back(temp);
-    //    if (reach_lsm_double_line()) {
-    //    }
-
-    ChangePoint testpoint;
-
-    //    uint64_t size = version;
-  }
+  void Detect(int sec_elapsed);
 
   void PopChangePoints(int secs_elapsed) {
     for (auto it = tuning_points.begin(); it != tuning_points.end(); it++) {
@@ -318,14 +194,23 @@ class ReporterAgentWithTuning : public ReporterAgent {
     }
   }
 
+  void print_useless_thing() {
+    std::cout
+        //        << "test"
+        << this->running_db_->immutable_db_options().job_stats.get()->size()
+        << std::endl;
+  }
   void DetectAndTuning(int secs_elapsed) {
-    Detect(secs_elapsed);
-    if (tuning_points.empty()) {
-      return;
-    }
-    PopChangePoints(secs_elapsed);
+    //    Detect(secs_elapsed);
+    std::cout << "show data" << std::endl;
+    print_useless_thing();
+    //    if (tuning_points.empty()) {
+    //      return;
+    //    }
+    //    PopChangePoints(secs_elapsed);
   }
 };  // end ReporterWithTuning
+
 class ReporterWithMoreDetails : public ReporterAgent {
  private:
   DBImpl* db_ptr;
@@ -352,19 +237,8 @@ class ReporterWithMoreDetails : public ReporterAgent {
     int num_running_compactions = db_ptr->num_running_compactions();
     int num_running_flushes = db_ptr->num_running_flushes();
 
-    //    std::stringstream compaction_stat_list_ss;
-    //    std::string compaction_stat;
-    //    compaction_stat_list_ss << "[";
-    //    for (ColumnFamilyData* cfd : *compaction_queue_ptr) {
-    //      cfd->internal_stats();
-    //    }
     report_file_->Append(ToString(num_running_compactions) + ",");
     report_file_->Append(ToString(num_running_flushes) + ",");
-    //    compaction_stat_list_ss >> compaction_stat;
-    //    compaction_stat.replace(compaction_stat.end() - 1,
-    //    compaction_stat.end(),
-    //                            "]");
-    //    report_file_->Append(compaction_stat);
   }
   void RecordLSMShape() {
     auto vstorage = db_ptr->GetVersionSet()

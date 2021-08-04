@@ -821,6 +821,7 @@ Status CompactionJob::Install(const MutableCFOptions& mutable_cf_options) {
     stream << "file_prepare_write_nanos"
            << compaction_job_stats_->file_prepare_write_nanos;
   }
+  this->db_options_.job_stats->push_back(*compaction_job_stats_);
 
   stream << "lsm_state";
   stream.StartArray();

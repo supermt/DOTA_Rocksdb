@@ -2977,6 +2977,9 @@ class Benchmark {
     } else {
       std::cout << "no tuner" << std::endl;
     }
+    if (FLAGS_DOTA_enabled) {
+      FLAGS_report_bg_io_stats = true;
+    }
 
     //    ParseColumnFamilyOption();
 
