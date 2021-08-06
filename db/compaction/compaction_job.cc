@@ -821,7 +821,22 @@ Status CompactionJob::Install(const MutableCFOptions& mutable_cf_options) {
     stream << "file_prepare_write_nanos"
            << compaction_job_stats_->file_prepare_write_nanos;
   }
-  this->db_options_.job_stats->push_back(*compaction_job_stats_);
+  // add by jinghuan, used for Report Agent
+  if (mutable_cf_options.report_bg_io_stats) {
+    QuicksandMetrics metrics;
+    metrics.max_bg_flush = env_->GetBackgroundThreads(Env::HIGH);
+    metrics.max_bg_compaction = env_->GetBackgroundThreads(Env::LOW);
+    metrics.write_out_bandwidth = bytes_written_per_sec;
+    metrics.read_in_bandwidth = bytes_read_per_sec;
+    metrics.io_stat = iostats_context;
+    metrics.input_level = compact_->compaction->start_level();
+    metrics.output_level = compact_->compaction->output_level();
+    metrics.cpu_time_ratio = (double)stats.cpu_micros / (double)stats.micros;
+    metrics.total_micros = stats.micros;
+    metrics.drop_ratio =
+        (double)stats.num_dropped_records / (double)stats.num_input_records;
+    this->db_options_.job_stats->push_back(metrics);
+  }
 
   stream << "lsm_state";
   stream.StartArray();

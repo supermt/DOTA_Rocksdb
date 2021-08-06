@@ -392,6 +392,11 @@ class PosixEnv : public CompositeEnvWrapper {
     }
     return ss.str();
   }
+  std::vector<std::pair<size_t, uint64_t>>* GetThreadPoolWaitingTime(
+      Env::Priority priority) override {
+    assert(priority >= Priority::BOTTOM && priority <= Priority::HIGH);
+    return thread_pools_[priority].GetThreadWaitingTime();
+  }
 
  private:
   friend Env* Env::Default();

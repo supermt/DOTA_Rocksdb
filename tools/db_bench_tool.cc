@@ -622,6 +622,7 @@ DEFINE_string(change_points, "",
 // auto-tuner related options
 
 DEFINE_bool(DOTA_enabled, false, "Whether trigger the DOTA framework");
+DEFINE_int64(DOTA_tuning_gap, 0, "Tuning gap of the DOTA agent, in secs ");
 DEFINE_bool(mutable_compaction_thread_prior, false,
             "trigger multi_level compaction prior");
 DEFINE_bool(detailed_running_stats, false,
@@ -3475,9 +3476,16 @@ class Benchmark {
     if (FLAGS_report_interval_seconds > 0) {
       if (change_point_num > 0 || FLAGS_DOTA_enabled) {
         // need to use another Report Agent
-        reporter_agent.reset(new ReporterAgentWithTuning(
-            reinterpret_cast<DBImpl*>(db_.db), FLAGS_env, FLAGS_report_file,
-            FLAGS_report_interval_seconds));
+        if (FLAGS_DOTA_tuning_gap == 0) {
+          reporter_agent.reset(new ReporterAgentWithTuning(
+              reinterpret_cast<DBImpl*>(db_.db), FLAGS_env, FLAGS_report_file,
+              FLAGS_report_interval_seconds, FLAGS_report_interval_seconds));
+        } else {
+          reporter_agent.reset(new ReporterAgentWithTuning(
+              reinterpret_cast<DBImpl*>(db_.db), FLAGS_env, FLAGS_report_file,
+              FLAGS_report_interval_seconds, FLAGS_DOTA_tuning_gap));
+        }
+
         for (auto point : config_change_points) {
           reporter_agent->InsertNewTuningPoints(point);
         }

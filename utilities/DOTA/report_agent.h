@@ -129,33 +129,25 @@ class ReporterAgent {
     }
   }
 };
-// class QuicksandMetricAgent : public ReporterAgent {
-//  private:
-//   std::vector<std::pair<uint64_t, double>> LSM_CPU_ratio;
-//   std::vector<std::pair<uint64_t, double>> L0_overlapping_ratio;
-//   std::vector<std::pair<uint64_t, int>> L0_nums;
-//   std::vector<std::pair<uint64_t, double>> disk_bandwidth;
-//
-//   std::string QuicksandMetricAgentHeader() const {
-//
-//     return "secs_elapsed,interval_qps";
-//   }
-// };
 
 class ReporterAgentWithTuning : public ReporterAgent {
  private:
   std::vector<ChangePoint> tuning_points;
   DBImpl* running_db_;
-  uint64_t last_report_micro;
+  uint64_t last_metrics_collect_secs;
+  uint64_t last_compaction_thread_len;
+  uint64_t last_flush_thread_len;
   std::string DOTAHeader() const {
     return "secs_elapsed,interval_qps,batch_size";
   }
+  uint64_t tuning_gap_secs_;
 
  protected:
  public:
   ReporterAgentWithTuning(DBImpl* running_db, Env* env,
                           const std::string& fname,
-                          uint64_t report_interval_secs)
+                          uint64_t report_interval_secs,
+                          uint64_t dota_tuning_gap_secs = 1)
       : ReporterAgent(env, fname, report_interval_secs, DOTAHeader()) {
     tuning_points = std::vector<ChangePoint>();
     tuning_points.clear();
@@ -166,10 +158,17 @@ class ReporterAgentWithTuning : public ReporterAgent {
     } else {
       running_db_ = running_db;
     }
+    this->tuning_gap_secs_ =
+        std::max(dota_tuning_gap_secs, report_interval_secs);
+    this->last_metrics_collect_secs = 0;
+    this->last_compaction_thread_len = 0;
+    this->last_flush_thread_len = 0;
   }
+
   const std::string memtable_size = "write_buffer_size";
   const std::string table_size = "target_file_size_base";
-  const static unsigned long history_lsm_shape = 10;
+  const static unsigned long history_lsm_shape =
+      10;  // Recorded history lsm shape, here we record 10 secs
   std::deque<LSM_STATE> shape_list;
   const size_t default_memtable_size = 64 << 20;
 
@@ -194,23 +193,26 @@ class ReporterAgentWithTuning : public ReporterAgent {
     }
   }
 
-  void print_useless_thing() {
-    std::cout
-        //        << "test"
-        << this->running_db_->immutable_db_options().job_stats.get()->size()
-        << std::endl;
-  }
+  void print_useless_thing();
   void DetectAndTuning(int secs_elapsed) {
     //    Detect(secs_elapsed);
-    std::cout << "show data" << std::endl;
-    print_useless_thing();
+    std::cout << "secs elapsed: " << secs_elapsed << std::endl;
+    if (secs_elapsed % tuning_gap_secs_ == 0) {
+      print_useless_thing();
+      // clean up the compaction array
+      this->running_db_->immutable_db_options().job_stats->clear();
+      std::cout << "last metrics collect secs" << last_metrics_collect_secs
+                << std::endl;
+      last_metrics_collect_secs = secs_elapsed;
+    }
+
     //    if (tuning_points.empty()) {
     //      return;
     //    }
     //    PopChangePoints(secs_elapsed);
   }
 };  // end ReporterWithTuning
-
+typedef ReporterAgent DOTAAgent;
 class ReporterWithMoreDetails : public ReporterAgent {
  private:
   DBImpl* db_ptr;

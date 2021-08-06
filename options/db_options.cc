@@ -466,7 +466,7 @@ ImmutableDBOptions::ImmutableDBOptions(const DBOptions& options)
       log_readahead_size(options.log_readahead_size),
       file_checksum_gen_factory(options.file_checksum_gen_factory),
       best_efforts_recovery(options.best_efforts_recovery) {
-  job_stats = std::make_shared<std::vector<CompactionJobStats>>();
+  job_stats = std::make_shared<std::vector<QuicksandMetrics>>();
 }
 
 void ImmutableDBOptions::Dump(Logger* log) const {

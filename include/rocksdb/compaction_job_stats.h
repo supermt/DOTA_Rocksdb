@@ -6,17 +6,39 @@
 #pragma once
 #include <stddef.h>
 #include <stdint.h>
+
 #include <string>
 
+#include "iostats_context.h"
 #include "rocksdb/rocksdb_namespace.h"
 
 namespace ROCKSDB_NAMESPACE {
+struct QuicksandMetrics {
+  QuicksandMetrics() { Reset(); }
+  void Reset();
+  int input_level = 0;
+  int output_level = 1;
+  double drop_ratio = 0.0;
+  double write_out_bandwidth;
+  double read_in_bandwidth;
+  int max_bg_compaction;
+  int max_bg_flush;
+  double cpu_time_ratio;
+  double total_micros;
+  //  struct op_latency_nanos {
+  //    uint64_t prepare_latency;
+  //    uint64_t fsync_latency;
+  //    uint64_t range_latency;
+  //    uint64_t file_write_latency;
+  //  };
+  IOStatsContext io_stat{};
+};
+
 struct CompactionJobStats {
   CompactionJobStats() { Reset(); }
   void Reset();
   // Aggregate the CompactionJobStats from another instance with this one
   void Add(const CompactionJobStats& stats);
-
   // the elapsed time of this compaction in microseconds.
   uint64_t elapsed_micros;
 

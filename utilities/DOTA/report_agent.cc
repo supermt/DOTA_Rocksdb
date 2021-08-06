@@ -17,7 +17,7 @@ void ReporterAgent::InsertNewTuningPoints(ChangePoint point) {
   std::cout << "can't use change point @ " << point.change_timing
             << " Due to using default reporter" << std::endl;
 };
-void ReporterAgent::DetectAndTuning(int secs_elapsed) { secs_elapsed++; }
+void ReporterAgent::DetectAndTuning(int secs_elapsed) {}
 
 void ReporterAgentWithTuning::ApplyChangePoint(ChangePoint point) {
   //    //    db_.db->GetDBOptions();
@@ -98,10 +98,51 @@ void ReporterAgentWithTuning::Detect(int sec_elapsed) {
   }
   shape_list.push_back(temp);
   reach_lsm_double_line(sec_elapsed, &opt);
+}
+void ReporterAgentWithTuning::print_useless_thing() {
+  // clear the vector once we print out the message
+  for (auto compaction_stat :
+       *this->running_db_->immutable_db_options().job_stats.get()) {
+    std::cout << "L0 overlapping ratio: " << compaction_stat.drop_ratio
+              << std::endl;
+    std::cout << "CPU Time ratio: " << compaction_stat.cpu_time_ratio
+              << std::endl;
+    std::cout << "Some latency" << compaction_stat.io_stat.open_nanos
+              << compaction_stat.io_stat.read_nanos
+              << compaction_stat.io_stat.write_nanos
+              << compaction_stat.io_stat.fsync_nanos
+              << compaction_stat.io_stat.range_sync_nanos
+              << compaction_stat.io_stat.allocate_nanos
+              << compaction_stat.io_stat.cpu_read_nanos
+              << compaction_stat.io_stat.cpu_write_nanos
+              << compaction_stat.io_stat.prepare_write_nanos << std::endl;
 
-  ChangePoint testpoint;
+    std::cout << "Background Limits"
+              << "compaction_job: " << compaction_stat.max_bg_compaction << ","
+              << "flush_job: " << compaction_stat.max_bg_flush << std::endl;
+    std::cout << "Read/Write bandwidth" << compaction_stat.read_in_bandwidth
+              << "/" << compaction_stat.write_out_bandwidth << std::endl;
+  }
+  std::cout << this->running_db_->immutable_db_options().job_stats.get()->size()
+            << " Compaction(s) triggered" << std::endl;
+  std::cout << "Flushing thread idle time: " << std::endl;
+  auto flush_thread_idle_list = *env_->GetThreadPoolWaitingTime(Env::HIGH);
+  auto compaction_thread_idle_list = *env_->GetThreadPoolWaitingTime(Env::LOW);
 
-  //    uint64_t size = version;
+  uint64_t temp = flush_thread_idle_list.size();
+  for (uint64_t i = last_flush_thread_len; i < temp; i++) {
+    std::cout << flush_thread_idle_list[i].first << " : "
+              << flush_thread_idle_list[i].second << std::endl;
+  }
+  last_flush_thread_len = temp;
+
+  std::cout << "Compaction thread idle time: " << std::endl;
+  temp = compaction_thread_idle_list.size();
+  for (uint64_t i = last_compaction_thread_len; i < temp; i++) {
+    std::cout << compaction_thread_idle_list[i].first << " : "
+              << compaction_thread_idle_list[i].second << std::endl;
+  }
+  last_compaction_thread_len = temp;
 }
 
 };  // namespace ROCKSDB_NAMESPACE

@@ -50,6 +50,10 @@ struct ThreadPoolImpl::Impl {
 
   void SetBackgroundThreadsInternal(int num, bool allow_reduce);
   int GetBackgroundThreads();
+
+  std::vector<std::pair<size_t, uint64_t>>* GetThreadPoolWaiting() {
+    return &this->thread_waiting_time;
+  };
   std::string GetThreadPoolTiming() {
     std::stringstream ss;
     ss << "timestamp (micros) of each thread creating\n";

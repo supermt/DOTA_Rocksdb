@@ -88,4 +88,14 @@ void CompactionJobStats::Add(const CompactionJobStats& /*stats*/) {}
 
 #endif  // !ROCKSDB_LITE
 
+void QuicksandMetrics::Reset() {
+  input_level = 0;
+  output_level = 1;
+  drop_ratio = 0.0;
+  write_out_bandwidth = 0.0;
+  max_bg_compaction = 1;
+  max_bg_flush = 1;
+  io_stat.Reset();
+}
+
 }  // namespace ROCKSDB_NAMESPACE
