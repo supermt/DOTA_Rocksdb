@@ -25,6 +25,7 @@ struct QuicksandMetrics {
   int max_bg_flush;
   double cpu_time_ratio;
   double total_micros;
+  double write_amplification;
   //  struct op_latency_nanos {
   //    uint64_t prepare_latency;
   //    uint64_t fsync_latency;

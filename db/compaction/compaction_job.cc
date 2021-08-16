@@ -835,6 +835,7 @@ Status CompactionJob::Install(const MutableCFOptions& mutable_cf_options) {
     metrics.total_micros = stats.micros;
     metrics.drop_ratio =
         (double)stats.num_dropped_records / (double)stats.num_input_records;
+    metrics.write_amplification = write_amp;
     this->db_options_.job_stats->push_back(metrics);
   }
 
