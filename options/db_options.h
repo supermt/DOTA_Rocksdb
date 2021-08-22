@@ -91,6 +91,7 @@ struct ImmutableDBOptions {
   std::shared_ptr<FileChecksumGenFactory> file_checksum_gen_factory;
   bool best_efforts_recovery;
   std::shared_ptr<std::vector<QuicksandMetrics>> job_stats;
+  std::shared_ptr<std::vector<FlushMetrics>> flush_stats;
 };
 
 struct MutableDBOptions {

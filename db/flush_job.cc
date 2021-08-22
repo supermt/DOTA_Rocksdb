@@ -9,9 +9,8 @@
 
 #include "db/flush_job.h"
 
-#include <cinttypes>
-
 #include <algorithm>
+#include <cinttypes>
 #include <vector>
 
 #include "db/builder.h"
@@ -51,7 +50,7 @@
 
 namespace ROCKSDB_NAMESPACE {
 
-const char* GetFlushReasonString (FlushReason flush_reason) {
+const char* GetFlushReasonString(FlushReason flush_reason) {
   switch (flush_reason) {
     case FlushReason::kOthers:
       return "Other Reasons";
@@ -129,17 +128,14 @@ FlushJob::FlushJob(const std::string& dbname, ColumnFamilyData* cfd,
   TEST_SYNC_POINT("FlushJob::FlushJob()");
 }
 
-FlushJob::~FlushJob() {
-  ThreadStatusUtil::ResetThreadStatus();
-}
+FlushJob::~FlushJob() { ThreadStatusUtil::ResetThreadStatus(); }
 
 void FlushJob::ReportStartedFlush() {
   ThreadStatusUtil::SetColumnFamily(cfd_, cfd_->ioptions()->env,
                                     db_options_.enable_thread_tracking);
   ThreadStatusUtil::SetThreadOperation(ThreadStatus::OP_FLUSH);
-  ThreadStatusUtil::SetThreadOperationProperty(
-      ThreadStatus::COMPACTION_JOB_ID,
-      job_context_->job_id);
+  ThreadStatusUtil::SetThreadOperationProperty(ThreadStatus::COMPACTION_JOB_ID,
+                                               job_context_->job_id);
   IOSTATS_RESET(bytes_written);
 }
 
@@ -149,8 +145,7 @@ void FlushJob::ReportFlushInputSize(const autovector<MemTable*>& mems) {
     input_size += mem->ApproximateMemoryUsage();
   }
   ThreadStatusUtil::IncreaseThreadOperationProperty(
-      ThreadStatus::FLUSH_BYTES_MEMTABLES,
-      input_size);
+      ThreadStatus::FLUSH_BYTES_MEMTABLES, input_size);
 }
 
 void FlushJob::RecordFlushIOStats() {
@@ -195,8 +190,7 @@ Status FlushJob::Run(LogsWithPrepTracker* prep_tracker,
   TEST_SYNC_POINT("FlushJob::Start");
   db_mutex_->AssertHeld();
   assert(pick_memtable_called);
-  AutoThreadOperationStageUpdater stage_run(
-      ThreadStatus::STAGE_FLUSH_RUN);
+  AutoThreadOperationStageUpdater stage_run(ThreadStatus::STAGE_FLUSH_RUN);
   if (mems_.empty()) {
     ROCKS_LOG_BUFFER(log_buffer_, "[%s] Nothing in memtable to flush",
                      cfd_->GetName().c_str());
@@ -368,8 +362,7 @@ Status FlushJob::WriteLevel0Table() {
       }
       const uint64_t current_time = static_cast<uint64_t>(_current_time);
 
-      uint64_t oldest_key_time =
-          mems_.front()->ApproximateOldestKeyTime();
+      uint64_t oldest_key_time = mems_.front()->ApproximateOldestKeyTime();
 
       // It's not clear whether oldest_key_time is always available. In case
       // it is not available, use current_time.
@@ -446,6 +439,18 @@ Status FlushJob::WriteLevel0Table() {
   cfd_->internal_stats()->AddCompactionStats(0 /* level */, thread_pri_, stats);
   cfd_->internal_stats()->AddCFStats(InternalStats::BYTES_FLUSHED,
                                      meta_.fd.GetFileSize());
+
+  FlushMetrics metrics;
+  metrics.total_bytes = stats.bytes_written;
+  metrics.memtable_ratio = 0.0;
+  for (auto mem : mems_) {
+    metrics.memtable_ratio += (double)mem->ApproximateMemoryUsage() /
+                              mutable_cf_options_.write_buffer_size;
+  }
+  metrics.memtable_ratio /= mems_.size();
+  metrics.write_out_bandwidth = stats.bytes_written / stats.micros;
+
+  db_options_.flush_stats->push_back(metrics);
   RecordFlushIOStats();
   return s;
 }

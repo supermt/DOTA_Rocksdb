@@ -813,22 +813,31 @@ Status CompactionJob::Install(const MutableCFOptions& mutable_cf_options) {
            << compaction_job_stats_->num_single_del_fallthru;
   }
 
+  QuicksandMetrics metrics;
   if (measure_io_stats_ && compaction_job_stats_ != nullptr) {
     stream << "file_write_nanos" << compaction_job_stats_->file_write_nanos;
+    metrics.io_stat.file_write_latency =
+        compaction_job_stats_->file_write_nanos;
+
     stream << "file_range_sync_nanos"
            << compaction_job_stats_->file_range_sync_nanos;
+    metrics.io_stat.range_latency =
+        compaction_job_stats_->file_range_sync_nanos;
+
     stream << "file_fsync_nanos" << compaction_job_stats_->file_fsync_nanos;
+    metrics.io_stat.fsync_latency = compaction_job_stats_->file_fsync_nanos;
+
     stream << "file_prepare_write_nanos"
            << compaction_job_stats_->file_prepare_write_nanos;
+    metrics.io_stat.prepare_latency =
+        compaction_job_stats_->file_prepare_write_nanos;
   }
   // add by jinghuan, used for Report Agent
   if (mutable_cf_options.report_bg_io_stats) {
-    QuicksandMetrics metrics;
     metrics.max_bg_flush = env_->GetBackgroundThreads(Env::HIGH);
     metrics.max_bg_compaction = env_->GetBackgroundThreads(Env::LOW);
     metrics.write_out_bandwidth = bytes_written_per_sec;
     metrics.read_in_bandwidth = bytes_read_per_sec;
-    metrics.io_stat = iostats_context;
     metrics.input_level = compact_->compaction->start_level();
     metrics.output_level = compact_->compaction->output_level();
     metrics.cpu_time_ratio = (double)stats.cpu_micros / (double)stats.micros;
@@ -836,6 +845,9 @@ Status CompactionJob::Install(const MutableCFOptions& mutable_cf_options) {
     metrics.drop_ratio =
         (double)stats.num_dropped_records / (double)stats.num_input_records;
     metrics.write_amplification = write_amp;
+    metrics.total_bytes = compact_->total_bytes;
+    metrics.current_pending_bytes =
+        vstorage->estimated_compaction_needed_bytes();
     this->db_options_.job_stats->push_back(metrics);
   }
 
