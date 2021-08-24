@@ -655,6 +655,7 @@ set(SOURCES
         memtable/skiplistrep.cc
         memtable/vectorrep.cc
         memtable/write_buffer_manager.cc
+        utilities/DOTA/DOTA_tuner.cc
         utilities/DOTA/report_agent.cc
         monitoring/histogram.cc
         monitoring/histogram_windowing.cc

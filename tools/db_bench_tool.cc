@@ -72,7 +72,8 @@
 #include "util/stderr_logger.h"
 #include "util/string_util.h"
 #include "util/xxhash.h"
-#include "utilities/DOTA/report_agent.h"
+#include "rocksdb/utilities/report_agent.h"
+//#include "rocksdb/utilities/DOTA_tuner.h"
 #include "utilities/blob_db/blob_db.h"
 #include "utilities/merge_operators.h"
 #include "utilities/merge_operators/bytesxor.h"
@@ -622,6 +623,7 @@ DEFINE_string(change_points, "",
 // auto-tuner related options
 
 DEFINE_bool(DOTA_enabled, false, "Whether trigger the DOTA framework");
+DEFINE_bool(Funnel_enable, false, "Use Funnel shape model");
 DEFINE_int64(DOTA_tuning_gap, 0, "Tuning gap of the DOTA agent, in secs ");
 DEFINE_bool(mutable_compaction_thread_prior, false,
             "trigger multi_level compaction prior");
@@ -4044,6 +4046,21 @@ class Benchmark {
       }
       options.table_factory.reset(
           NewBlockBasedTableFactory(block_based_options));
+    }
+    if (FLAGS_Funnel_enable) {
+      std::cout << "Use Funnel shape model" << std::endl;
+      FLAGS_max_bytes_for_level_multiplier = 0.1;
+      FLAGS_max_bytes_for_level_multiplier_additional_v.clear();
+      for (int i = 0; i < FLAGS_num_levels; i++) {
+        FLAGS_max_bytes_for_level_multiplier_additional_v.push_back(100);
+      }
+      FLAGS_max_bytes_for_level_multiplier_additional_v.at(2) = 1;
+      FLAGS_max_bytes_for_level_multiplier_additional_v.at(3) = 100;
+      for (int i = 0; i < FLAGS_num_levels; i++) {
+        std::cout << FLAGS_max_bytes_for_level_multiplier *
+                         FLAGS_max_bytes_for_level_multiplier_additional_v.at(i)
+                  << std::endl;
+      }
     }
     if (FLAGS_max_bytes_for_level_multiplier_additional_v.size() > 0) {
       if (FLAGS_max_bytes_for_level_multiplier_additional_v.size() !=

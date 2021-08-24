@@ -2,7 +2,9 @@
 // Created by jinghuan on 5/24/21.
 //
 
-#include "report_agent.h"
+#include "rocksdb/utilities/report_agent.h"
+
+#include "rocksdb/utilities/DOTA_tuner.h"
 
 namespace ROCKSDB_NAMESPACE {
 ReporterAgent::~ReporterAgent() {
@@ -320,7 +322,8 @@ ReporterAgentWithTuning::ReporterAgentWithTuning(DBImpl* running_db, Env* env,
                                                  uint64_t report_interval_secs,
                                                  uint64_t dota_tuning_gap_secs)
     : ReporterAgent(env, fname, report_interval_secs, DOTAHeader()),
-      options_when_boost(running_db->GetOptions()) {
+      options_when_boost(running_db->GetOptions()),
+      test_tuner() {
   tuning_points = std::vector<ChangePoint>();
   tuning_points.clear();
   PrepareOBMap();
@@ -331,6 +334,10 @@ ReporterAgentWithTuning::ReporterAgentWithTuning(DBImpl* running_db, Env* env,
   } else {
     running_db_ = running_db;
   }
+  std::unordered_map<std::string, std::string> test;
+  //  test.emplace("max_bytes_for_level_multiplier_additional",
+  //  "[10,1,1,1,1,1,1]");
+  running_db->SetOptions(test);
   this->tuning_gap_secs_ = std::max(dota_tuning_gap_secs, report_interval_secs);
   this->last_metrics_collect_secs = 0;
   this->last_compaction_thread_len = 0;
@@ -645,6 +652,16 @@ void ReporterAgentWithTuning::AdjustBatchChangePoint(
   results->push_back(write_buffer);
   results->push_back(sst_size);
   results->push_back(L1_total_size);
+}
+void ReporterAgentWithTuning::PopChangePoints(int secs_elapsed) {
+  for (auto it = tuning_points.begin(); it != tuning_points.end(); it++) {
+    if (it->change_timing <= secs_elapsed) {
+      if (running_db_ != nullptr) {
+        ApplyChangePoint(*it);
+      }
+      tuning_points.erase(it--);
+    }
+  }
 }
 
 void ReporterWithMoreDetails::DetectAndTuning(int secs_elapsed) {

@@ -20,22 +20,16 @@
 #include <unordered_map>
 
 #include "db/db_impl/db_impl.h"
-
+#include "rocksdb/utilities/DOTA_tuner.h"
 namespace ROCKSDB_NAMESPACE {
 
 typedef std::vector<double> LSM_STATE;
 class ReporterAgent;
 struct ChangePoint;
+class DOTA_Tuner;
 
 class ReporterWithMoreDetails;
 class ReporterAgentWithTuning;
-
-struct ChangePoint {
-  std::string opt;
-  std::string value;
-  int change_timing;
-  bool db_width;
-};
 
 class ReporterAgent {
  private:
@@ -138,7 +132,8 @@ class ReporterAgentWithTuning : public ReporterAgent {
   uint64_t last_compaction_thread_len;
   uint64_t last_flush_thread_len;
   std::map<std::string, void*> string_to_attributes_map;
-  std::string DOTAHeader() const {
+  DOTA_Tuner test_tuner;
+  static std::string DOTAHeader() {
     return "secs_elapsed,interval_qps,batch_size,thread_num";
   }
   uint64_t tuning_gap_secs_;
@@ -170,16 +165,7 @@ class ReporterAgentWithTuning : public ReporterAgent {
 
   void DetectChangesPoints(int sec_elapsed);
 
-  void PopChangePoints(int secs_elapsed) {
-    for (auto it = tuning_points.begin(); it != tuning_points.end(); it++) {
-      if (it->change_timing <= secs_elapsed) {
-        if (running_db_ != nullptr) {
-          ApplyChangePoint(*it);
-        }
-        tuning_points.erase(it--);
-      }
-    }
-  }
+  void PopChangePoints(int secs_elapsed);
 
   static bool thread_idle_cmp(std::pair<size_t, uint64_t> p1,
                               std::pair<size_t, uint64_t> p2) {
