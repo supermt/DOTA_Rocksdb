@@ -28,6 +28,8 @@ class ReporterAgent;
 struct ChangePoint;
 class DOTA_Tuner;
 
+struct SystemScores;
+
 class ReporterWithMoreDetails;
 class ReporterAgentWithTuning;
 
@@ -132,7 +134,7 @@ class ReporterAgentWithTuning : public ReporterAgent {
   uint64_t last_compaction_thread_len;
   uint64_t last_flush_thread_len;
   std::map<std::string, void*> string_to_attributes_map;
-  DOTA_Tuner test_tuner;
+  DOTA_Tuner tuner;
   static std::string DOTAHeader() {
     return "secs_elapsed,interval_qps,batch_size,thread_num";
   }
@@ -141,7 +143,6 @@ class ReporterAgentWithTuning : public ReporterAgent {
   std::map<std::string, int> baseline_map;
   const int thread_num_upper_bound = 12;
   const int thread_num_lower_bound = 2;
-  void PrepareOBMap();
 
  public:
   const std::string memtable_size = "write_buffer_size";
@@ -160,7 +161,6 @@ class ReporterAgentWithTuning : public ReporterAgent {
                           uint64_t report_interval_secs,
                           uint64_t dota_tuning_gap_secs = 1);
 
-  void ApplyChangePoint(ChangePoint point);
   void ApplyChangePointsInstantly(std::vector<ChangePoint>* points);
 
   void DetectChangesPoints(int sec_elapsed);
@@ -175,16 +175,12 @@ class ReporterAgentWithTuning : public ReporterAgent {
   Status ReportLine(int secs_elapsed, int total_ops_done_snapshot) override;
   void print_useless_thing(int secs_elapsed);
   void DetectAndTuning(int secs_elapsed) override;
-  void DetectInstantChanges(int secs_elapsed,
-                            std::vector<ChangePoint>* results);
-
   enum CongestionStatus {
     kCongestion,
     kReachThreshold,
     kUnderThreshold,
     kIgnore
   };
-  enum TuningOP { kDouble = 0, kLinear = 1, kDecrease = 2, kKeep = 3 };
 
   struct BatchSizeScore {
     double l0_stall;
@@ -221,28 +217,6 @@ class ReporterAgentWithTuning : public ReporterAgent {
   TuningOP VoteForThread(ThreadNumScore& scores);
   TuningOP VoteForMemtable(BatchSizeScore& scores);
 
-  TuningOP last_thread_op = kDouble;
-  TuningOP last_batch_op = kDouble;
-  ThreadNumScore last_thread_score = {0.0, 0.0, 0.0, 0.0, 0.0};
-  BatchSizeScore last_batch_score = {0.0, 0.0, 0.0, 0.0, 0.0};
-
-  void ScoreTuneAndVote(int secs_elapsed, Options& current_opt,
-                        Version* version, ColumnFamilyData* cfd,
-                        VersionStorageInfo* vfs,
-                        std::vector<ChangePoint>* results);
-  void WriteBufferChanging(int secs_elapsed, Options& current_opt,
-                           Version* version, ColumnFamilyData* cfd,
-                           VersionStorageInfo* vfs,
-                           std::vector<ChangePoint>* results);
-  void DetectIdleThreads(int secs_elapsed, Options& current_opt,
-                         Version* version, ColumnFamilyData* cfd,
-                         VersionStorageInfo* vfs,
-                         std::vector<ChangePoint>* results);
-  void AdjustThreadChangePoint(TuningOP stats,
-                               std::vector<ChangePoint>* results,
-                               Options& current_opt);
-  void AdjustBatchChangePoint(TuningOP stats, std::vector<ChangePoint>* results,
-                              Options& current_opt);
 };  // end ReporterWithTuning
 typedef ReporterAgent DOTAAgent;
 class ReporterWithMoreDetails : public ReporterAgent {
