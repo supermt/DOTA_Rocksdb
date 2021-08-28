@@ -167,7 +167,7 @@ class ReporterAgentWithTuning : public ReporterAgent {
   }
 
   Status ReportLine(int secs_elapsed, int total_ops_done_snapshot) override;
-  void print_useless_thing(int secs_elapsed);
+//  void print_useless_thing(int secs_elapsed);
   void DetectAndTuning(int secs_elapsed) override;
   enum CongestionStatus {
     kCongestion,

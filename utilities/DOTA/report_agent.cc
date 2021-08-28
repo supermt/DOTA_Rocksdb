@@ -19,7 +19,7 @@ void ReporterAgent::InsertNewTuningPoints(ChangePoint point) {
   std::cout << "can't use change point @ " << point.change_timing
             << " Due to using default reporter" << std::endl;
 };
-void ReporterAgent::DetectAndTuning(int secs_elapsed) {}
+void ReporterAgent::DetectAndTuning(int /*secs_elapsed*/) {}
 Status ReporterAgent::ReportLine(int secs_elapsed,
                                  int total_ops_done_snapshot) {
   std::string report = ToString(secs_elapsed) + "," +
@@ -34,41 +34,44 @@ void ReporterAgentWithTuning::DetectChangesPoints(int sec_elapsed) {
   ApplyChangePointsInstantly(&change_points);
 }
 
-void ReporterAgentWithTuning::print_useless_thing(int secs_elapsed) {
-  // clear the vector once we print out the message
-  for (auto compaction_stat :
-       *this->running_db_->immutable_db_options().job_stats.get()) {
-    std::cout << "L0 overlapping ratio: " << compaction_stat.drop_ratio
-              << std::endl;
-    std::cout << "CPU Time ratio: " << compaction_stat.cpu_time_ratio
-              << std::endl;
-    std::cout << "Background Limits"
-              << "compaction_job: " << compaction_stat.max_bg_compaction << ","
-              << "flush_job: " << compaction_stat.max_bg_flush << std::endl;
-    std::cout << "Read/Write bandwidth" << compaction_stat.read_in_bandwidth
-              << "/" << compaction_stat.write_out_bandwidth << std::endl;
-  }
-  std::cout << this->running_db_->immutable_db_options().job_stats.get()->size()
-            << " Compaction(s) triggered" << std::endl;
-  std::cout << "Flushing thread idle time: " << std::endl;
-  auto flush_thread_idle_list = *env_->GetThreadPoolWaitingTime(Env::HIGH);
-  auto compaction_thread_idle_list = *env_->GetThreadPoolWaitingTime(Env::LOW);
-
-  uint64_t temp = flush_thread_idle_list.size();
-  for (uint64_t i = last_flush_thread_len; i < temp; i++) {
-    std::cout << flush_thread_idle_list[i].first << " : "
-              << flush_thread_idle_list[i].second << std::endl;
-  }
-  last_flush_thread_len = temp;
-
-  std::cout << "Compaction thread idle time: " << std::endl;
-  temp = compaction_thread_idle_list.size();
-  for (uint64_t i = last_compaction_thread_len; i < temp; i++) {
-    std::cout << compaction_thread_idle_list[i].first << " : "
-              << compaction_thread_idle_list[i].second << std::endl;
-  }
-  last_compaction_thread_len = temp;
-}
+// void ReporterAgentWithTuning::print_useless_thing(int secs_elapsed) {
+//   // clear the vector once we print out the message
+//   for (auto compaction_stat :
+//        *this->running_db_->immutable_db_options().job_stats.get()) {
+//     std::cout << "L0 overlapping ratio: " << compaction_stat.drop_ratio
+//               << std::endl;
+//     std::cout << "CPU Time ratio: " << compaction_stat.cpu_time_ratio
+//               << std::endl;
+//     std::cout << "Background Limits"
+//               << "compaction_job: " << compaction_stat.max_bg_compaction <<
+//               ","
+//               << "flush_job: " << compaction_stat.max_bg_flush << std::endl;
+//     std::cout << "Read/Write bandwidth" << compaction_stat.read_in_bandwidth
+//               << "/" << compaction_stat.write_out_bandwidth << std::endl;
+//   }
+//   std::cout <<
+//   this->running_db_->immutable_db_options().job_stats.get()->size()
+//             << " Compaction(s) triggered" << std::endl;
+//   std::cout << "Flushing thread idle time: " << std::endl;
+//   auto flush_thread_idle_list = *env_->GetThreadPoolWaitingTime(Env::HIGH);
+//   auto compaction_thread_idle_list =
+//   *env_->GetThreadPoolWaitingTime(Env::LOW);
+//
+//   uint64_t temp = flush_thread_idle_list.size();
+//   for (uint64_t i = last_flush_thread_len; i < temp; i++) {
+//     std::cout << flush_thread_idle_list[i].first << " : "
+//               << flush_thread_idle_list[i].second << std::endl;
+//   }
+//   last_flush_thread_len = temp;
+//
+//   std::cout << "Compaction thread idle time: " << std::endl;
+//   temp = compaction_thread_idle_list.size();
+//   for (uint64_t i = last_compaction_thread_len; i < temp; i++) {
+//     std::cout << compaction_thread_idle_list[i].first << " : "
+//               << compaction_thread_idle_list[i].second << std::endl;
+//   }
+//   last_compaction_thread_len = temp;
+// }
 
 void ReporterAgentWithTuning::DetectAndTuning(int secs_elapsed) {
   if (secs_elapsed % tuning_gap_secs_ == 0) {

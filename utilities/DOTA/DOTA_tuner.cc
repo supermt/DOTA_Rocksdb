@@ -203,7 +203,7 @@ void DOTA_Tuner::AdjustmentTuning(std::vector<ChangePoint> *change_list,
   // tune for memtable
   FillUpChangeList(change_list, tuning_op);
 }
-TuningOP DOTA_Tuner::VoteForOP(SystemScores &current_score,
+TuningOP DOTA_Tuner::VoteForOP(SystemScores & /*current_score*/,
                                ThreadStallLevels thread_level,
                                BatchSizeStallLevels batch_level) {
   TuningOP op;

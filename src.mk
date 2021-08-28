@@ -210,6 +210,8 @@ LIB_SOURCES =                                                   \
   utilities/debug.cc                                            \
   utilities/env_mirror.cc                                       \
   utilities/env_timed.cc                                        \
+  utilities/DOTA/report_agent.cc\
+  utilities/DOTA/DOTA_tuner.cc                      \
   utilities/leveldb_options/leveldb_options.cc                  \
   utilities/memory/memory_util.cc                               \
   utilities/merge_operators/max.cc                              \
@@ -247,7 +249,6 @@ LIB_SOURCES =                                                   \
   utilities/ttl/db_ttl_impl.cc                                  \
   utilities/write_batch_with_index/write_batch_with_index.cc    \
   utilities/write_batch_with_index/write_batch_with_index_internal.cc    \
-  utilities/DOTA/report_agent.cc\
 
 ifeq ($(ARMCRC_SOURCE),1)
 LIB_SOURCES +=\

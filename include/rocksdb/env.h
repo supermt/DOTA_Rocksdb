@@ -530,7 +530,7 @@ class Env {
     return "haven't been implemented";
   }
   virtual std::vector<std::pair<size_t, uint64_t>>* GetThreadPoolWaitingTime(
-      Env::Priority priority) {
+      Env::Priority /*priority*/) {
     return nullptr;
   }
 
