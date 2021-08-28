@@ -145,12 +145,6 @@ class ReporterAgentWithTuning : public ReporterAgent {
   const int thread_num_lower_bound = 2;
 
  public:
-  const std::string memtable_size = "write_buffer_size";
-  const std::string table_size = "target_file_size_base";
-  const std::string max_bg_compaction = "max_background_compactions";
-  const std::string max_subcompaction = "max_subcompactions";
-  const std::string max_bg_flush = "max_background_flushes";
-  const std::string max_bg_jobs = "max_background_jobs";
   const static unsigned long history_lsm_shape =
       10;  // Recorded history lsm shape, here we record 10 secs
   std::deque<LSM_STATE> shape_list;

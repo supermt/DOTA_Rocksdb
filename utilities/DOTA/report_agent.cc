@@ -132,7 +132,8 @@ ReporterAgentWithTuning::ReporterAgentWithTuning(DBImpl* running_db, Env* env,
                                                  uint64_t dota_tuning_gap_secs)
     : ReporterAgent(env, fname, report_interval_secs, DOTAHeader()),
       options_when_boost(running_db->GetOptions()),
-      tuner(options_when_boost, running_db, &last_report_, &total_ops_done_) {
+      tuner(options_when_boost, running_db, &last_report_, &total_ops_done_,
+            env, dota_tuning_gap_secs) {
   tuning_points = std::vector<ChangePoint>();
   tuning_points.clear();
   std::cout << "using reporter agent with change points." << std::endl;

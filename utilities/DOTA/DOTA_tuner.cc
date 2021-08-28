@@ -8,22 +8,85 @@
 
 namespace ROCKSDB_NAMESPACE {
 
-void DOTA_Tuner::DetectTuningOperations(int secs_elapsed,
-                                        std::vector<ChangePoint> *change_list) {
+void DOTA_Tuner::DetectTuningOperations(
+    int secs_elapsed, std::vector<ChangePoint> *change_list_ptr) {
   current_sec = secs_elapsed;
   UpdateSystemStats();
-  auto current_score = ScoreTheSystem();
-  if (tuning_rounds < locating_rounds || secs_elapsed < locating_before) {
-    // locate the starting point according to a short time detecting.
-    // In this phase, detect the starting position of the system.
-    LocateByScore(current_score);
-  }
-  GenerateTuningOP(change_list);
+  SystemScores current_score = ScoreTheSystem();
+  UpdateMaxScore(current_score);
+  scores.push_back(current_score);
+  gradients.push_back(current_score - scores.front());
+
+  auto thread_stat = LocateThreadStates(current_score);
+  auto batch_stat = LocateBatchStates(current_score);
+
+  AdjustmentTuning(change_list_ptr, current_score, thread_stat, batch_stat);
+  // decide the operation based on the best behavior and last behavior
+  // update the histories
+  last_thread_states = thread_stat;
+  last_batch_stat = batch_stat;
   tuning_rounds++;
 }
-void DOTA_Tuner::LocateByScore(SystemScores &score) {
-  std::cout << "First stage, locating the position" << std::endl;
+ThreadStallLevels DOTA_Tuner::LocateThreadStates(SystemScores &score) {
+  if (score.total_idle_time > 1) {
+    return kIdle;
+  }
+
+  if (score.memtable_speed < scores.front().memtable_speed * 0.5) {
+    // speed is slower than before, performance is in the stall area
+    if (score.immutable_number > 1) {
+      if (score.flush_speed_avg >= max_scores.flush_speed_avg * 0.5) {
+        // it's not influenced by the flushing speed
+        return kNeedMoreFlush;
+      } else if (score.flush_speed_var > score.flush_speed_var * 0.8 ||
+                 current_opt.max_background_jobs > 6) {
+        return kBandwidthCongestion;
+      }
+    }
+    if (score.l0_num > 0.7) {
+      // it's in the l0 stall
+      return kNeedMoreCompaction;
+    }
+    if (score.estimate_compaction_bytes > 1) {
+      return kPendingBytes;
+    }
+  } else if (score.memtable_speed < scores.front().memtable_speed * 0.7) {
+    if (score.l0_num > 0.7) {
+      // it's in the l0 stall
+      return kNeedMoreCompaction;
+    }
+    if (score.estimate_compaction_bytes > 1) {
+      return kPendingBytes;
+    }
+    if (score.l0_drop_ratio < 0.1) {
+      return kQuicksand;
+    }
+    return kGoodArea;
+  }
+  return kGoodArea;
 }
+
+BatchSizeStallLevels DOTA_Tuner::LocateBatchStates(SystemScores &score) {
+  if (score.memtable_speed < max_scores.memtable_speed * 0.7) {
+    if (score.l0_num > 0.7) {
+      return kL0Stall;
+    }
+    if (score.active_size_ratio > 0.5) {
+      return kTinyMemtable;
+    }
+    if (score.immutable_number > 1) {
+      return kTinyMemtable;
+    }
+    if (score.estimate_compaction_bytes > 0.8) {
+      return kOversizeCompaction;
+    }
+  } else if (score.l0_drop_ratio < 0.1) {
+    // not in stall, may in the quicksand
+    return kLowOverlapping;
+  }
+  return kStallFree;
+};
+
 SystemScores DOTA_Tuner::ScoreTheSystem() {
   SystemScores current_score;
   current_score.memtable_speed =
@@ -84,17 +147,166 @@ SystemScores DOTA_Tuner::ScoreTheSystem() {
                          current_opt.level0_slowdown_writes_trigger;
   // disk bandwidth,estimate_pending_bytes ratio
   current_score.disk_bandwidth /= kMicrosInSecond;
-  current_score.estimate_compaction_bytes /=
+  current_score.estimate_compaction_bytes =
+      (double)max_pending_bytes /
       current_opt.soft_pending_compaction_bytes_limit;
+
+  auto flush_thread_idle_list = *env_->GetThreadPoolWaitingTime(Env::HIGH);
+  auto compaction_thread_idle_list = *env_->GetThreadPoolWaitingTime(Env::LOW);
+  std::unordered_map<int, uint64_t> thread_idle_time;
+  uint64_t temp = flush_thread_idle_list.size();
+
+  for (uint64_t i = last_flush_thread_len; i < temp; i++) {
+    auto temp_entry = flush_thread_idle_list[i];
+    int key = -(int)(temp_entry.first + 1);
+    auto value = temp_entry.second;
+    try {
+      thread_idle_time.at(key) += value;
+    } catch (std::out_of_range &e) {
+      thread_idle_time.emplace(key, value);
+    }
+  }
+  temp = compaction_thread_idle_list.size();
+  for (uint64_t i = last_compaction_thread_len; i < temp; i++) {
+    auto temp_entry = compaction_thread_idle_list[i];
+    int key = (int)(temp_entry.first + 1);
+    auto value = temp_entry.second;
+    try {
+      thread_idle_time.at(key) += value;
+    } catch (std::out_of_range &e) {
+      thread_idle_time.emplace(key, value);
+    }
+  }
+
+  for (auto entry : thread_idle_time) {
+    double idle_ratio = (double)entry.second / (kMicrosInSecond * tuning_gap);
+    current_score.total_idle_time += idle_ratio;
+  }
+
+  current_score.total_idle_time /= current_opt.max_background_jobs;
 
   // clean up
   flush_list_accessed = flush_result_length;
   compaction_list_accessed = compaction_result_length;
+  last_compaction_thread_len = compaction_thread_idle_list.size();
+  last_flush_thread_len = flush_thread_idle_list.size();
 
   return current_score;
 }
-void DOTA_Tuner::GenerateTuningOP(std::vector<ChangePoint> *change_list) {
-  std::cout << "Start generating OPs" << std::endl;
+
+void DOTA_Tuner::AdjustmentTuning(std::vector<ChangePoint> *change_list,
+                                  SystemScores &score,
+                                  ThreadStallLevels thread_levels,
+                                  BatchSizeStallLevels batch_levels) {
+  // tune for thread number
+  auto tuning_op = VoteForOP(score, thread_levels, batch_levels);
+  // tune for memtable
+  FillUpChangeList(change_list, tuning_op);
+}
+TuningOP DOTA_Tuner::VoteForOP(SystemScores &current_score,
+                               ThreadStallLevels thread_level,
+                               BatchSizeStallLevels batch_level) {
+  TuningOP op;
+  if (thread_level < kGoodArea) {
+    op.ThreadOp = kDouble;
+  } else if (thread_level == kQuicksand) {
+    op.ThreadOp = kKeep;
+  } else if (thread_level < kIdle) {
+    op.ThreadOp = kLinearIncrease;
+  } else if (thread_level < kBandwidthCongestion) {
+    op.ThreadOp = kLinearDecrease;
+  } else {
+    op.ThreadOp = kHalf;
+  }
+
+  if (batch_level < kL0Stall) {
+    op.BatchOp = kDouble;
+  } else if (batch_level < kOversizeCompaction) {
+    if (op.ThreadOp != kKeep)
+      op.BatchOp = kLinearIncrease;
+    else
+      op.BatchOp = kKeep;
+  } else {
+    op.BatchOp = kLinearDecrease;
+  }
+  return op;
+}
+
+inline void DOTA_Tuner::SetThreadNum(std::vector<ChangePoint> *change_list,
+                                     uint64_t target_value) {
+  ChangePoint thread_num_cp;
+  thread_num_cp.opt = max_bg_jobs;
+  thread_num_cp.db_width = true;
+  target_value = std::max(target_value, min_thread);
+  target_value = std::min(target_value, max_thread);
+  thread_num_cp.value = ToString(target_value);
+  change_list->push_back(thread_num_cp);
+}
+
+inline void DOTA_Tuner::SetBatchSize(std::vector<ChangePoint> *change_list,
+                                     uint64_t target_value) {
+  ChangePoint memtable_size_cp;
+  memtable_size_cp.db_width = false;
+  memtable_size_cp.opt = memtable_size;
+
+  ChangePoint sst_size;
+  sst_size.opt = table_size;
+  target_value = std::max(target_value, min_memtable_size);
+  target_value = std::min(target_value, max_memtable_size);
+  memtable_size_cp.value = ToString(target_value);
+  sst_size.value = ToString(target_value);
+  ChangePoint L1_total_size;
+  L1_total_size.opt = table_size;
+
+  uint64_t l1_size = current_opt.level0_file_num_compaction_trigger *
+                     current_opt.min_write_buffer_number_to_merge *
+                     target_value;
+  L1_total_size.value = ToString(l1_size);
+  sst_size.db_width = false;
+  L1_total_size.db_width = false;
+  change_list->push_back(memtable_size_cp);
+  change_list->push_back(L1_total_size);
+  change_list->push_back(sst_size);
+}
+
+void DOTA_Tuner::FillUpChangeList(std::vector<ChangePoint> *change_list,
+                                  TuningOP op) {
+  uint64_t current_thread_num = current_opt.max_background_jobs;
+  uint64_t current_batch_size = current_opt.write_buffer_size;
+  switch (op.BatchOp) {
+    case kDouble:
+      SetBatchSize(change_list, current_batch_size *= 2);
+      break;
+    case kLinearIncrease:
+      SetBatchSize(change_list,
+                   current_batch_size += default_opts.write_buffer_size);
+      break;
+    case kLinearDecrease:
+      SetBatchSize(change_list,
+                   current_batch_size -= default_opts.write_buffer_size);
+      break;
+    case kHalf:
+      SetBatchSize(change_list, current_batch_size /= 2);
+      break;
+    case kKeep:
+      break;
+  }
+  switch (op.ThreadOp) {
+    case kDouble:
+      SetThreadNum(change_list, current_thread_num *= 2);
+      break;
+    case kLinearIncrease:
+      SetThreadNum(change_list, current_thread_num += 1);
+      break;
+    case kLinearDecrease:
+      SetThreadNum(change_list, current_thread_num -= 2);
+      break;
+    case kHalf:
+      SetThreadNum(change_list, current_thread_num /= 2);
+      break;
+    case kKeep:
+      break;
+  }
 }
 
 // ReporterAgentWithTuning::TuningOP ReporterAgentWithTuning::VoteForMemtable(
