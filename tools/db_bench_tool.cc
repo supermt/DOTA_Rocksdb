@@ -16,6 +16,7 @@
 #include <unistd.h>
 #endif
 #include <fcntl.h>
+#include <rocksdb/sst_file_reader.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/types.h>
@@ -57,6 +58,7 @@
 #include "rocksdb/utilities/object_registry.h"
 #include "rocksdb/utilities/optimistic_transaction_db.h"
 #include "rocksdb/utilities/options_util.h"
+#include "rocksdb/utilities/report_agent.h"
 #include "rocksdb/utilities/sim_cache.h"
 #include "rocksdb/utilities/transaction.h"
 #include "rocksdb/utilities/transaction_db.h"
@@ -72,7 +74,6 @@
 #include "util/stderr_logger.h"
 #include "util/string_util.h"
 #include "util/xxhash.h"
-#include "rocksdb/utilities/report_agent.h"
 //#include "rocksdb/utilities/DOTA_tuner.h"
 #include "utilities/blob_db/blob_db.h"
 #include "utilities/merge_operators.h"
@@ -111,6 +112,7 @@ DEFINE_string(
     "compact,"
     "compactall,"
     "multireadrandom,"
+    "quicksand,"
     "mixgraph,"
     "readseq,"
     "readtorowcache,"
@@ -3133,6 +3135,8 @@ class Benchmark {
         method = &Benchmark::ApproximateSizeRandom;
       } else if (name == "mixgraph") {
         method = &Benchmark::MixGraph;
+      } else if (name == "quicksand") {
+        method = &Benchmark::Quicksand;
       } else if (name == "readmissing") {
         ++key_size_;
         method = &Benchmark::ReadRandom;
@@ -4451,7 +4455,7 @@ class Benchmark {
     }
   }
 
-  enum WriteMode { RANDOM, SEQUENTIAL, UNIQUE_RANDOM };
+  enum WriteMode { RANDOM, SEQUENTIAL, UNIQUE_RANDOM, QUICKSAND };
 
   void WriteSeqDeterministic(ThreadState* thread) {
     DoDeterministicCompact(thread, open_options_.compaction_style, SEQUENTIAL);
@@ -4487,6 +4491,17 @@ class Benchmark {
         RandomShuffle(values_.begin(), values_.end(),
                       static_cast<uint32_t>(FLAGS_seed));
       }
+
+      if (mode_ == QUICKSAND) {
+        values_.resize(num_);
+        uint64_t flag = num_ / 2;
+        for (uint64_t i = 0; i < flag; ++i) {
+          values_[i] = i;
+        }
+        for (uint64_t i = flag; i < num_; ++i) {
+          values_[i] = i - flag;
+        }
+      }
     }
 
     uint64_t Next() {
@@ -4496,6 +4511,9 @@ class Benchmark {
         case RANDOM:
           return rand_->Next() % num_;
         case UNIQUE_RANDOM:
+          assert(next_ < num_);
+          return values_[next_++];
+        case QUICKSAND:
           assert(next_ < num_);
           return values_[next_++];
       }
@@ -4532,6 +4550,12 @@ class Benchmark {
   void DoWrite(ThreadState* thread, WriteMode write_mode) {
     const int test_duration = write_mode == RANDOM ? FLAGS_duration : 0;
     const int64_t num_ops = writes_ == 0 ? num_ : writes_;
+
+    uint64_t flag_num = num_;
+    int64_t target_num_p0 = 0;
+    int64_t target_num_p50 = flag_num / 2;
+    int64_t target_num_p100 = flag_num - 1;
+    int hit_counts[3] = {0, 0, 0};
 
     size_t num_key_gens = 1;
     if (db_.db == nullptr) {
@@ -4601,6 +4625,15 @@ class Benchmark {
 
       for (int64_t j = 0; j < entries_per_batch_; j++) {
         int64_t rand_num = key_gens[id]->Next();
+
+        if (rand_num == target_num_p0) {
+          hit_counts[0]++;
+        } else if (rand_num == target_num_p50) {
+          hit_counts[1]++;
+        } else if (rand_num == target_num_p100) {
+          hit_counts[2]++;
+        }
+
         GenerateKeyFromInt(rand_num, FLAGS_num, &key);
         Slice val = gen.Generate();
         if (use_blob_db_) {
@@ -4714,6 +4747,11 @@ class Benchmark {
         exit(1);
       }
     }
+    std::cout << "flags have been generated for:[";
+    for (int i = 0; i < 3; i++) {
+      std::cout << " " << hit_counts[i];
+    }
+    std::cout << "]" << std::endl;
     thread->stats.AddBytes(bytes);
   }
 
@@ -5653,6 +5691,115 @@ class Benchmark {
       return keyrange_size_ * keyrange_id + key_offset;
     }
   };
+
+  void Quicksand(ThreadState* thread) {
+    // run for three times, in different speed.
+    std::unique_ptr<const char[]> key_guard;
+    Slice key = AllocateKey(&key_guard);
+
+    uint64_t flag_num = num_;
+    int64_t target_num_p0 = 0;
+    int64_t target_num_p25 = flag_num / 4;
+    int64_t target_num_p50 = flag_num / 2;
+    int64_t target_num_p75 = target_num_p50 + target_num_p25;
+    int64_t target_num_p100 = flag_num - 1;
+    std::vector<int64_t> target_nums = {target_num_p0, target_num_p25,
+                                        target_num_p50, target_num_p75,
+                                        target_num_p100};
+
+    std::vector<HitPosition> target_keys;
+    auto dbimpl = static_cast<DBImpl*>(db_.db);
+
+    for (auto target_num : target_nums) {
+      GenerateKeyFromInt(target_num, FLAGS_num, &key);
+      dbimpl->immutable_db_options().hit_records->emplace_back(key.ToString());
+      target_keys.emplace_back(key.ToString());
+    }
+
+    DoWrite(thread, RANDOM);
+    for (auto hit_point : *dbimpl->immutable_db_options().hit_records) {
+      std::cout << "flag value: " << Slice(hit_point.key).ToString(true)
+                << " has been hit " << hit_point.captured_position.size()
+                << " times. " << std::endl;
+      std::cout << "[";
+      for (int hit_level : hit_point.captured_position) {
+        std::cout << " " << hit_level << " ";
+      }
+      std::cout << "]" << std::endl;
+    }
+    auto version =
+        dbimpl->GetVersionSet()->GetColumnFamilySet()->GetDefault()->current();
+    auto cfd = version->cfd();
+    std::cout << "total number of Memtables "
+              << cfd->imm()->NumFlushed() + cfd->imm()->NumNotFlushed()
+              << std::endl;
+    uint64_t max_pending_bytes = 0;
+    int max_immutable_num = 0;
+    for (auto metric : *dbimpl->immutable_db_options().job_stats) {
+      if (metric.current_pending_bytes > max_pending_bytes)
+        max_pending_bytes = metric.current_pending_bytes;
+      if (metric.immu_num > max_immutable_num) {
+        max_immutable_num = metric.immu_num;
+      }
+    }
+    std::cout << "peak memtable size " << max_immutable_num << std::endl;
+    std::cout << "max pending bytes " << max_pending_bytes << std::endl;
+    std::cout << "stops with pending bytes "
+              << dbimpl->immutable_db_options()
+                     .job_stats->back()
+                     .current_pending_bytes
+              << std::endl;
+
+    // scan through all sstables.
+    auto vfs = cfd->current()->storage_info();
+    std::cout << "total live data size " << vfs->EstimateLiveDataSize()
+              << std::endl;
+    int num_level = cfd->NumberLevels();
+    int tracing_get_id = 0;
+    for (int level = 0; level < num_level; level++) {
+      auto files = vfs->FilesInTargetLevel(level);
+      if (files.size() == 0) {
+        continue;
+      }
+      std::cout << " search in level: " << level;
+      std::cout << "files number " << files.size() << std::endl;
+      for (auto fd : files) {
+        for (auto& slice_counter : target_keys) {
+          PinnableSlice value;
+          GetContext get_context(open_options_.comparator, nullptr, nullptr,
+                                 nullptr, GetContext::kNotFound,
+                                 slice_counter.key, &value, nullptr, nullptr,
+                                 true, nullptr, nullptr, nullptr, nullptr,
+                                 nullptr, nullptr, tracing_get_id);
+          Status search_result =
+              fd->fd.table_reader->Get(ReadOptions(), slice_counter.key,
+                                       &get_context, prefix_extractor_);
+          tracing_get_id++;
+          if (search_result.ok() &&
+              get_context.State() != GetContext::kNotFound) {
+            slice_counter.captured_position.push_back(fd->fd.GetNumber());
+          }
+          //          if
+          //          (fd->smallest.user_key().compare(Slice(slice_counter.key))
+          //          <= 0 &&
+          //              fd->largest.user_key().compare(Slice(slice_counter.key))
+          //              >= 0) {
+          //            slice_counter.captured_position.push_back(fd->fd.GetNumber());
+          //          }
+        }
+      }  // level scanned
+    }
+    for (auto& slice_counter : target_keys) {
+      std::cout << "Key:" << Slice(slice_counter.key).ToString(true)
+                << " get captured in: " << std::endl;
+      std::cout << "[";
+      for (int fd_num : slice_counter.captured_position) {
+        auto temp = vfs->GetFileLocation(fd_num);
+        std::cout << temp.GetLevel() << ":" << temp.GetPosition() << " ";
+      }
+      std::cout << "]" << std::endl;
+    }
+  }
 
   // The social graph wokrload mixed with Get, Put, Iterator queries.
   // The value size and iterator length follow Pareto distribution.

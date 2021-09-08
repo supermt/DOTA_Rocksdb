@@ -468,6 +468,7 @@ ImmutableDBOptions::ImmutableDBOptions(const DBOptions& options)
       best_efforts_recovery(options.best_efforts_recovery) {
   job_stats = std::make_shared<std::vector<QuicksandMetrics>>();
   flush_stats = std::make_shared<std::vector<FlushMetrics>>();
+  hit_records = std::make_shared<std::vector<HitPosition>>();
 }
 
 void ImmutableDBOptions::Dump(Logger* log) const {

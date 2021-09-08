@@ -92,6 +92,7 @@ struct ImmutableDBOptions {
   bool best_efforts_recovery;
   std::shared_ptr<std::vector<QuicksandMetrics>> job_stats;
   std::shared_ptr<std::vector<FlushMetrics>> flush_stats;
+  std::shared_ptr<std::vector<HitPosition>> hit_records;
 };
 
 struct MutableDBOptions {

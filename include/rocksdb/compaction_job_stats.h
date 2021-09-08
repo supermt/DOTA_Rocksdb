@@ -8,6 +8,8 @@
 #include <stdint.h>
 
 #include <string>
+#include <utility>
+#include <vector>
 
 #include "iostats_context.h"
 #include "rocksdb/rocksdb_namespace.h"
@@ -19,6 +21,13 @@ struct FlushMetrics {
   double write_out_bandwidth = 0.0;
 };
 
+struct HitPosition {
+  std::string key;
+  std::vector<int> captured_position;
+  HitPosition(std::string target)
+      : key(std::move(target)), captured_position() {}
+  HitPosition() : key(), captured_position(0) {}
+};
 struct QuicksandMetrics {
   QuicksandMetrics() { Reset(); }
   void Reset();
@@ -34,6 +43,7 @@ struct QuicksandMetrics {
   double write_amplification;
   uint64_t total_bytes;
   uint64_t current_pending_bytes;
+  int immu_num;
   struct op_latency_nanos {
     void Reset() {
       prepare_latency = 0;

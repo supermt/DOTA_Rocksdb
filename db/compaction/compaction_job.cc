@@ -834,6 +834,7 @@ Status CompactionJob::Install(const MutableCFOptions& mutable_cf_options) {
   }
   // add by jinghuan, used for Report Agent
   if (mutable_cf_options.report_bg_io_stats) {
+    metrics.immu_num = cfd->imm()->NumNotFlushed();
     metrics.max_bg_flush = env_->GetBackgroundThreads(Env::HIGH);
     metrics.max_bg_compaction = env_->GetBackgroundThreads(Env::LOW);
     metrics.write_out_bandwidth = bytes_written_per_sec;
@@ -850,7 +851,13 @@ Status CompactionJob::Install(const MutableCFOptions& mutable_cf_options) {
         vstorage->estimated_compaction_needed_bytes();
     this->db_options_.job_stats->push_back(metrics);
   }
-
+  for (HitPosition& p : *this->db_options_.hit_records) {
+    if (compact_->SmallestUserKey().compare(Slice(p.key)) <= 0 &&
+        compact_->LargestUserKey().compare(Slice(p.key)) >= 0) {
+      // SSTs would be overlapped since L0
+      p.captured_position.push_back(compact_->compaction->output_level());
+    }
+  }
   stream << "lsm_state";
   stream.StartArray();
   for (int level = 0; level < vstorage->num_levels(); ++level) {

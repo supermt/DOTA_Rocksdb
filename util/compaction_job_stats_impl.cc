@@ -95,6 +95,7 @@ void QuicksandMetrics::Reset() {
   write_out_bandwidth = 0.0;
   max_bg_compaction = 1;
   max_bg_flush = 1;
+  immu_num = 0;
   io_stat.Reset();
 }
 
