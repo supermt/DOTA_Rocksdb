@@ -631,12 +631,9 @@ DEFINE_bool(mutable_compaction_thread_prior, false,
             "trigger multi_level compaction prior");
 DEFINE_bool(detailed_running_stats, false,
             "Whether record more detailed information in report agent");
-DEFINE_int64(huawei_tuner_base_speed, 1500000,
-             "the initial speed of write-in speed, calculated by bytes.");
-DEFINE_double(huawei_tuner_initial_l2_time, 0.5, "The basic l2 speed");
-DEFINE_double(huawei_tuner_constant_k, 1.25,
-              "The coefficient for decreasing rate limiter");
-
+DEFINE_int64(quicksand_fold_num, 4,
+             "folded times of the target benchmark for better quicksand effect "
+             "observation");
 // end jinghuan
 DEFINE_int64(tuner_step_size, 0,
              "time gap between two scanning process, or the time window size"
@@ -5696,7 +5693,7 @@ class Benchmark {
     // run for three times, in different speed.
     std::unique_ptr<const char[]> key_guard;
     Slice key = AllocateKey(&key_guard);
-
+    num_ /= FLAGS_quicksand_fold_num;
     uint64_t flag_num = num_;
     int64_t target_num_p0 = 0;
     int64_t target_num_p25 = flag_num / 4;
