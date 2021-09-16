@@ -5741,14 +5741,11 @@ class Benchmark {
     }
     std::cout << "peak memtable size " << max_immutable_num << std::endl;
     std::cout << "max pending bytes " << max_pending_bytes << std::endl;
+    auto vfs = cfd->current()->storage_info();
     std::cout << "stops with pending bytes "
-              << dbimpl->immutable_db_options()
-                     .job_stats->back()
-                     .current_pending_bytes
-              << std::endl;
+              << vfs->estimated_compaction_needed_bytes() << std::endl;
 
     // scan through all sstables.
-    auto vfs = cfd->current()->storage_info();
     std::cout << "total live data size " << vfs->EstimateLiveDataSize()
               << std::endl;
     int num_level = cfd->NumberLevels();
