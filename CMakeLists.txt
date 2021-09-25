@@ -106,45 +106,26 @@ else ()
             list(APPEND THIRDPARTY_LIBS JeMalloc::JeMalloc)
         endif ()
     endif ()
-
-    #  if(WITH_GFLAGS)
-    #    # Config with namespace available since gflags 2.2.2
-    #    option(GFLAGS_USE_TARGET_NAMESPACE "Use gflags import target with namespace." ON)
-    #    find_package(gflags CONFIG)
-    #    if(gflags_FOUND)
-    #      if(TARGET ${GFLAGS_TARGET})
-    #        # Config with GFLAGS_TARGET available since gflags 2.2.0
-    #        list(APPEND THIRDPARTY_LIBS ${GFLAGS_TARGET})
-    #      else()
-    #        # Config with GFLAGS_LIBRARIES available since gflags 2.1.0
-    #        list(APPEND THIRDPARTY_LIBS ${GFLAGS_LIBRARIES})
-    #      endif()
-    #    else()
-    #      find_package(gflags REQUIRED)
-    #      list(APPEND THIRDPARTY_LIBS gflags::gflags)
-    #    endif()
-    #    add_definitions(-DGFLAGS=1)
-    #  endif()
-    if (WITH_GFLAGS)
+    if(WITH_GFLAGS)
         # Config with namespace available since gflags 2.2.2
         option(GFLAGS_USE_TARGET_NAMESPACE "Use gflags import target with namespace." ON)
         find_package(gflags CONFIG)
-        if (gflags_FOUND)
-            if (TARGET ${GFLAGS_TARGET})
+        if(gflags_FOUND)
+            if(TARGET ${GFLAGS_TARGET})
                 # Config with GFLAGS_TARGET available since gflags 2.2.0
                 set(GFLAGS_LIB ${GFLAGS_TARGET})
-            else ()
+            else()
                 # Config with GFLAGS_LIBRARIES available since gflags 2.1.0
-                set(GFLAGS_LIB ${GFLAGS_LIBRARIES})
-            endif ()
-        else ()
+                set(GFLAGS_LIB ${gflags_LIBRARIES})
+            endif()
+        else()
             find_package(gflags REQUIRED)
             set(GFLAGS_LIB gflags::gflags)
-        endif ()
+        endif()
         include_directories(${GFLAGS_INCLUDE_DIR})
         list(APPEND THIRDPARTY_LIBS ${GFLAGS_LIB})
         add_definitions(-DGFLAGS=1)
-    endif ()
+    endif()
 
     if (WITH_SNAPPY)
         find_package(Snappy CONFIG)
@@ -1249,7 +1230,7 @@ if (WITH_BENCHMARK_TOOLS)
             tools/db_bench.cc
             tools/db_bench_tool.cc)
     target_link_libraries(db_bench
-            ${ROCKSDB_LIB})
+            ${ROCKSDB_LIB} ${GFLAGS_LIB})
 
     add_executable(cache_bench
             cache/cache_bench.cc)
