@@ -1398,7 +1398,8 @@ void InternalStats::DumpCFStatsNoFileHistogram(std::string* value) {
 void InternalStats::DumpCFFileHistogram(std::string* value) {
   char buf[2000];
   snprintf(buf, sizeof(buf),
-           "\n** File Read Latency Histogram By Level [%s] **\n",
+           "\n** File Read Latency Histogram By Level (Include Compaction) "
+           "[%s] **\n",
            cfd_->GetName().c_str());
   value->append(buf);
 
@@ -1408,6 +1409,22 @@ void InternalStats::DumpCFFileHistogram(std::string* value) {
       snprintf(buf2, sizeof(buf2),
                "** Level %d read latency histogram (micros):\n%s\n", level,
                file_read_latency_[level].ToString().c_str());
+      value->append(buf2);
+    }
+  }
+
+  snprintf(buf, sizeof(buf),
+           "\n** File Read Latency Histogram By Level (Without Compaction) "
+           "[%s] **\n",
+           cfd_->GetName().c_str());
+  value->append(buf);
+
+  for (int level = 0; level < number_levels_; level++) {
+    if (!file_read_latency_reading_workload[level].Empty()) {
+      char buf2[5000];
+      snprintf(buf2, sizeof(buf2),
+               "** Level %d read latency histogram (micros):\n%s\n", level,
+               file_read_latency_reading_workload[level].ToString().c_str());
       value->append(buf2);
     }
   }

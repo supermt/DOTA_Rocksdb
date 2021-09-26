@@ -127,6 +127,7 @@ class InternalStats {
         comp_stats_(num_levels),
         comp_stats_by_pri_(Env::Priority::TOTAL),
         file_read_latency_(num_levels),
+        file_read_latency_reading_workload(num_levels),
         bg_error_count_(0),
         number_levels_(num_levels),
         env_(env),
@@ -294,7 +295,7 @@ class InternalStats {
       this->num_dropped_records += c.num_dropped_records;
       this->count += c.count;
       int num_of_reasons = static_cast<int>(CompactionReason::kNumOfReasons);
-      for (int i = 0; i< num_of_reasons; i++) {
+      for (int i = 0; i < num_of_reasons; i++) {
         counts[i] += c.counts[i];
       }
     }
@@ -333,6 +334,9 @@ class InternalStats {
       comp_stat.Clear();
     }
     for (auto& h : file_read_latency_) {
+      h.Clear();
+    }
+    for (auto& h : file_read_latency_reading_workload) {
       h.Clear();
     }
     cf_stats_snapshot_.Clear();
@@ -375,6 +379,9 @@ class InternalStats {
     return &file_read_latency_[level];
   }
 
+  HistogramImpl* GetFileReadWorkloadHist(int level) {
+    return &file_read_latency_reading_workload[level];
+  }
   uint64_t GetBackgroundErrorCount() const { return bg_error_count_; }
 
   uint64_t BumpAndGetBackgroundErrorCount() { return ++bg_error_count_; }
@@ -424,13 +431,14 @@ class InternalStats {
   std::vector<CompactionStats> comp_stats_;
   std::vector<CompactionStats> comp_stats_by_pri_;
   std::vector<HistogramImpl> file_read_latency_;
+  std::vector<HistogramImpl> file_read_latency_reading_workload;
 
   // Used to compute per-interval statistics
   struct CFStatsSnapshot {
     // ColumnFamily-level stats
     CompactionStats comp_stats;
-    uint64_t ingest_bytes_flush;      // Bytes written to L0 (Flush)
-    uint64_t stall_count;             // Stall count
+    uint64_t ingest_bytes_flush;  // Bytes written to L0 (Flush)
+    uint64_t stall_count;         // Stall count
     // Stats from compaction jobs - bytes written, bytes read, duration.
     uint64_t compact_bytes_write;
     uint64_t compact_bytes_read;
@@ -472,10 +480,10 @@ class InternalStats {
 
   struct DBStatsSnapshot {
     // DB-level stats
-    uint64_t ingest_bytes;            // Bytes written by user
-    uint64_t wal_bytes;               // Bytes written to WAL
-    uint64_t wal_synced;              // Number of times WAL is synced
-    uint64_t write_with_wal;          // Number of writes that request WAL
+    uint64_t ingest_bytes;    // Bytes written by user
+    uint64_t wal_bytes;       // Bytes written to WAL
+    uint64_t wal_synced;      // Number of times WAL is synced
+    uint64_t write_with_wal;  // Number of writes that request WAL
     // These count the number of writes processed by the calling thread or
     // another thread.
     uint64_t write_other;
@@ -682,13 +690,14 @@ class InternalStats {
     return false;
   }
 
-  bool GetIntProperty(const DBPropertyInfo& /*property_info*/, uint64_t* /*value*/,
-                      DBImpl* /*db*/) const {
+  bool GetIntProperty(const DBPropertyInfo& /*property_info*/,
+                      uint64_t* /*value*/, DBImpl* /*db*/) const {
     return false;
   }
 
   bool GetIntPropertyOutOfMutex(const DBPropertyInfo& /*property_info*/,
-                                Version* /*version*/, uint64_t* /*value*/) const {
+                                Version* /*version*/,
+                                uint64_t* /*value*/) const {
     return false;
   }
 };

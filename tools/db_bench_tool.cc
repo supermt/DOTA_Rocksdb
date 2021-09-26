@@ -5337,6 +5337,19 @@ class Benchmark {
     if (FLAGS_perf_level > ROCKSDB_NAMESPACE::PerfLevel::kDisable) {
       thread->stats.AddMessage(std::string("PERF_CONTEXT:\n") +
                                get_perf_context()->ToString());
+      for (int i = 0; i < FLAGS_num_levels; i++) {
+        auto perf_for_this_level =
+            (*(rocksdb::get_perf_context()->level_to_perf_context))[i];
+        if (perf_for_this_level.get_from_table_nanos == 0) {
+          continue;
+        }
+        std::cout << std::string("\nTable access in level ") + ToString(i) +
+                         " :\n" + "hit count: " +
+                         ToString(perf_for_this_level.user_key_return_count) +
+                         "\ttotal nanos: " +
+                         ToString(perf_for_this_level.get_from_table_nanos)
+                  << std::endl;
+      }
     }
   }
 
