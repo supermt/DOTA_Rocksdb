@@ -64,7 +64,7 @@ ThreadStallLevels DOTA_Tuner::LocateThreadStates(SystemScores &score) {
 }
 
 BatchSizeStallLevels DOTA_Tuner::LocateBatchStates(SystemScores &score) {
-  if (score.flush_speed_avg < scores.front().flush_speed_avg * 0.5) {
+  if (score.flush_speed_avg < max_scores.flush_speed_avg * 0.5) {
     std::cout << score.flush_speed_avg << "," << scores.front().flush_speed_avg
               << std::endl;
     if (score.l0_num > 0.7) {
@@ -77,7 +77,9 @@ BatchSizeStallLevels DOTA_Tuner::LocateBatchStates(SystemScores &score) {
       // too many idle threads, the memtable is too large.
       return kOversizeCompaction;
     }
-
+    if (score.l0_drop_ratio < 0.2) {
+      return kLowOverlapping;
+    }
     if (score.estimate_compaction_bytes > 0.8) {
       return kOversizeCompaction;
     }
