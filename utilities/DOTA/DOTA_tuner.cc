@@ -58,28 +58,29 @@ ThreadStallLevels DOTA_Tuner::LocateThreadStates(SystemScores &score) {
     if (score.estimate_compaction_bytes > 1) {
       return kPendingBytes;
     }
-    if (score.l0_drop_ratio < 0.1) {
-      return kQuicksand;
-    }
     return kGoodArea;
   }
   return kGoodArea;
 }
 
 BatchSizeStallLevels DOTA_Tuner::LocateBatchStates(SystemScores &score) {
-  if (score.memtable_speed < scores.back().memtable_speed * 0.7) {
+  if (score.flush_speed_avg < scores.front().flush_speed_avg * 0.5) {
+    std::cout << score.flush_speed_avg << "," << scores.front().flush_speed_avg
+              << std::endl;
     if (score.l0_num > 0.7) {
       return kL0Stall;
     }
     if (score.active_size_ratio > 0.5 || score.immutable_number > 1) {
       return kTinyMemtable;
     }
+    if (score.total_idle_time > 1) {
+      // too many idle threads, the memtable is too large.
+      return kOversizeCompaction;
+    }
+
     if (score.estimate_compaction_bytes > 0.8) {
       return kOversizeCompaction;
     }
-  } else if (score.l0_drop_ratio < 0.1) {
-    // not in stall, may in the quicksand
-    return kLowOverlapping;
   }
   return kStallFree;
 };
@@ -206,27 +207,26 @@ TuningOP DOTA_Tuner::VoteForOP(SystemScores & /*current_score*/,
   TuningOP op;
   if (thread_level < kGoodArea) {
     op.ThreadOp = kDouble;
-  } else if (thread_level == kQuicksand) {
+  } else if (thread_level == kGoodArea) {
     op.ThreadOp = kKeep;
-  } else if (thread_level < kIdle) {
-    op.ThreadOp = kLinearIncrease;
   } else if (thread_level < kBandwidthCongestion) {
     op.ThreadOp = kLinearDecrease;
   } else {
     op.ThreadOp = kHalf;
   }
   // only update batch when threads no had been changed.
-  if (op.ThreadOp == kKeep) {
-    if (batch_level < kL0Stall) {
-      op.BatchOp = kDouble;
-    } else if (batch_level == kLowOverlapping) {
-      op.BatchOp = kLinearIncrease;
-    } else if (batch_level == kStallFree) {
-      op.BatchOp = kKeep;
-    } else {
-      op.BatchOp = kLinearDecrease;
-    }
+  //  if (batch_level <= kL0Stall) {
+  //    op.BatchOp = kDouble;
+  //  } else if
+
+  if (batch_level <= kLowOverlapping) {
+    op.BatchOp = kLinearIncrease;
+  } else if (batch_level == kStallFree) {
+    op.BatchOp = kKeep;
+  } else {
+    op.BatchOp = kHalf;
   }
+
   return op;
 }
 
