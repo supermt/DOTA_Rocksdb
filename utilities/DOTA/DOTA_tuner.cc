@@ -19,7 +19,7 @@ void DOTA_Tuner::DetectTuningOperations(
 
   auto thread_stat = LocateThreadStates(current_score);
   auto batch_stat = LocateBatchStates(current_score);
-
+  std::cout << thread_stat << " , " << batch_stat << std::endl;
   AdjustmentTuning(change_list_ptr, current_score, thread_stat, batch_stat);
   // decide the operation based on the best behavior and last behavior
   // update the histories
@@ -28,57 +28,60 @@ void DOTA_Tuner::DetectTuningOperations(
   tuning_rounds++;
 }
 ThreadStallLevels DOTA_Tuner::LocateThreadStates(SystemScores &score) {
-  if (score.total_idle_time > 1) {
-    return kIdle;
-  }
-
-  if (score.memtable_speed < scores.front().memtable_speed * 0.5) {
+  if (score.memtable_speed < scores.front().memtable_speed * 0.3) {
+    std::cout << "too little threads" << std::endl;
     // speed is slower than before, performance is in the stall area
     if (score.immutable_number > 1) {
-      if (score.flush_speed_avg >= max_scores.flush_speed_avg * 0.5) {
-        // it's not influenced by the flushing speed
-        return kNeedMoreFlush;
-      } else if (score.flush_speed_var > score.flush_speed_var * 0.8 ||
-                 current_opt.max_background_jobs > 6) {
+      //      if (score.flush_speed_avg >= max_scores.flush_speed_avg * 0.5) {
+      //        // it's not influenced by the flushing speed
+      //        return kNeedMoreFlush;
+      //      } else
+      if (score.flush_speed_var > score.flush_speed_var * 0.8 ||
+          current_opt.max_background_jobs > 6) {
         return kBandwidthCongestion;
+      } else {
+        return kL0Stall;
       }
     }
     if (score.l0_num > 0.7) {
       // it's in the l0 stall
-      return kNeedMoreCompaction;
+      return kL0Stall;
     }
     if (score.estimate_compaction_bytes > 1) {
       return kPendingBytes;
     }
   } else if (score.memtable_speed < scores.front().memtable_speed * 0.7) {
+
     if (score.l0_num > 0.7) {
       // it's in the l0 stall
-      return kNeedMoreCompaction;
+      return kL0Stall;
+    }
+    if (score.total_idle_time > 1) {
+      return kIdle;
     }
     if (score.estimate_compaction_bytes > 1) {
       return kPendingBytes;
     }
-    if (score.l0_drop_ratio < 0.1) {
-      return kQuicksand;
-    }
+  } else {
+    std::cout << "thread" << score.memtable_speed << ","
+              << scores.front().memtable_speed << std::endl;
     return kGoodArea;
   }
-  return kGoodArea;
+  return kL0Stall;
 }
 
 BatchSizeStallLevels DOTA_Tuner::LocateBatchStates(SystemScores &score) {
-  if (score.memtable_speed < max_scores.memtable_speed * 0.7) {
+  if (score.memtable_speed < 0.5 * (scores.front().memtable_speed)) {
+    std::cout << score.memtable_speed << " " << max_scores.memtable_speed
+              << std::endl;
     if (score.l0_num > 0.7) {
-      return kL0Stall;
+      return kOverFrequency;
     }
     if (score.active_size_ratio > 0.5) {
       return kTinyMemtable;
     }
     if (score.immutable_number > 1) {
       return kTinyMemtable;
-    }
-    if (score.estimate_compaction_bytes > 0.8) {
-      return kOversizeCompaction;
     }
   } else if (score.l0_drop_ratio < 0.1) {
     // not in stall, may in the quicksand
@@ -209,7 +212,7 @@ TuningOP DOTA_Tuner::VoteForOP(SystemScores & /*current_score*/,
   TuningOP op;
   if (thread_level < kGoodArea) {
     op.ThreadOp = kDouble;
-  } else if (thread_level == kQuicksand) {
+  } else if (thread_level == kGoodArea) {
     op.ThreadOp = kKeep;
   } else if (thread_level < kIdle) {
     op.ThreadOp = kLinearIncrease;
@@ -219,16 +222,38 @@ TuningOP DOTA_Tuner::VoteForOP(SystemScores & /*current_score*/,
     op.ThreadOp = kHalf;
   }
 
-  if (batch_level < kL0Stall) {
-    op.BatchOp = kDouble;
-  } else if (batch_level < kOversizeCompaction) {
-    if (op.ThreadOp != kKeep)
+  switch (batch_level) {
+    case kTinyMemtable: {
+      op.BatchOp = kDouble;
+      break;
+    }
+    case kOverFrequency: {
       op.BatchOp = kLinearIncrease;
-    else
+      break;
+    }
+    case kStallFree: {
       op.BatchOp = kKeep;
-  } else {
-    op.BatchOp = kLinearDecrease;
+      break;
+    }
+    case kLowOverlapping: {
+      if (scores.back().estimate_compaction_bytes > 0.5) {
+        op.BatchOp = kLinearDecrease;
+      }
+      break;
+    }
   }
+
+  //  if (batch_level < kOverFrequency) {
+  //    op.BatchOp = kDouble;
+  //  } else if (batch_level < kStallFree) {
+  //    if (op.ThreadOp != kKeep)
+  //      op.BatchOp = kLinearIncrease;
+  //    else
+  //      op.BatchOp = kKeep;
+  //  } else if (batch_level == kLowOverlapping) {
+  //    op.BatchOp = kLinearDecrease;
+  //  }
+
   return op;
 }
 
