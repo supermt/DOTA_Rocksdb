@@ -202,7 +202,7 @@ class DOTA_Tuner {
 
   const uint64_t max_thread = 24;
   const uint64_t min_thread = 2;
-  const uint64_t max_memtable_size = 1024 << 20;
+  const uint64_t max_memtable_size = 512 << 20;
   const uint64_t min_memtable_size = 32 << 20;
 
   SystemScores ScoreTheSystem();
