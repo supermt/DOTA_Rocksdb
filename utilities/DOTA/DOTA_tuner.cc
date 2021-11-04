@@ -67,14 +67,11 @@ ThreadStallLevels DOTA_Tuner::LocateThreadStates(SystemScores &score) {
 }
 
 BatchSizeStallLevels DOTA_Tuner::LocateBatchStates(SystemScores &score) {
-  if (score.memtable_speed < max_scores.memtable_speed * 0.7) {
+  if (score.memtable_speed < scores.back().memtable_speed * 0.7) {
     if (score.l0_num > 0.7) {
       return kL0Stall;
     }
-    if (score.active_size_ratio > 0.5) {
-      return kTinyMemtable;
-    }
-    if (score.immutable_number > 1) {
+    if (score.active_size_ratio > 0.5 || score.immutable_number > 1) {
       return kTinyMemtable;
     }
     if (score.estimate_compaction_bytes > 0.8) {
@@ -218,16 +215,17 @@ TuningOP DOTA_Tuner::VoteForOP(SystemScores & /*current_score*/,
   } else {
     op.ThreadOp = kHalf;
   }
-
-  if (batch_level < kL0Stall) {
-    op.BatchOp = kDouble;
-  } else if (batch_level < kOversizeCompaction) {
-    if (op.ThreadOp != kKeep)
+  // only update batch when threads no had been changed.
+  if (op.ThreadOp == kKeep) {
+    if (batch_level < kL0Stall) {
+      op.BatchOp = kDouble;
+    } else if (batch_level == kLowOverlapping) {
       op.BatchOp = kLinearIncrease;
-    else
+    } else if (batch_level == kStallFree) {
       op.BatchOp = kKeep;
-  } else {
-    op.BatchOp = kLinearDecrease;
+    } else {
+      op.BatchOp = kLinearDecrease;
+    }
   }
   return op;
 }
