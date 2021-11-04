@@ -10,17 +10,19 @@
 namespace ROCKSDB_NAMESPACE {
 
 enum ThreadStallLevels : int {
-  kL0Stall,
-  kPendingBytes,
+  kNeedMoreFlush,
+  kNeedMoreCompaction,
   kGoodArea,
   kIdle,
-  kBandwidthCongestion
+  kBandwidthCongestion,
+  kPendingBytes
 };
 enum BatchSizeStallLevels : int {
   kTinyMemtable,
-  kOverFrequency,
-  kStallFree,
+  kL0Stall,
   kLowOverlapping,
+  kStallFree,
+  kOversizeCompaction
 };
 
 struct SystemScores {
@@ -122,8 +124,8 @@ class DOTA_Tuner {
         current_sec(0),
         flush_list_accessed(0),
         compaction_list_accessed(0),
-        last_thread_states(ThreadStallLevels(0)),
-        last_batch_stat(BatchSizeStallLevels(0)),
+        last_thread_states(kNeedMoreFlush),
+        last_batch_stat(kTinyMemtable),
         flush_list_from_opt_ptr(running_db->immutable_db_options().flush_stats),
         compaction_list_from_opt_ptr(
             running_db->immutable_db_options().job_stats),

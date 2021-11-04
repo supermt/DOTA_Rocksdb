@@ -64,7 +64,7 @@ ThreadStallLevels DOTA_Tuner::LocateThreadStates(SystemScores &score) {
 }
 
 BatchSizeStallLevels DOTA_Tuner::LocateBatchStates(SystemScores &score) {
-  if (score.flush_speed_avg < max_scores.flush_speed_avg * 0.5) {
+  if (score.flush_speed_avg < max_scores.flush_speed_avg * 0.7) {
     std::cout << score.flush_speed_avg << "," << scores.front().flush_speed_avg
               << std::endl;
     if (score.l0_num > 0.7) {
@@ -198,6 +198,7 @@ void DOTA_Tuner::AdjustmentTuning(std::vector<ChangePoint> *change_list,
                                   SystemScores &score,
                                   ThreadStallLevels thread_levels,
                                   BatchSizeStallLevels batch_levels) {
+//  std::cout << thread_levels << " " << batch_levels << std::endl;
   // tune for thread number
   auto tuning_op = VoteForOP(score, thread_levels, batch_levels);
   // tune for memtable
