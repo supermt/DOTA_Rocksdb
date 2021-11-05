@@ -11,15 +11,14 @@ namespace ROCKSDB_NAMESPACE {
 
 enum ThreadStallLevels : int {
   kNeedMoreFlush,
-  kNeedMoreCompaction,
+  kL0Stall,
+  kPendingBytes,
   kGoodArea,
   kIdle,
-  kBandwidthCongestion,
-  kPendingBytes
+  kBandwidthCongestion
 };
 enum BatchSizeStallLevels : int {
   kTinyMemtable,
-  kL0Stall,
   kLowOverlapping,
   kStallFree,
   kOversizeCompaction

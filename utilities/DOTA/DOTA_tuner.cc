@@ -28,48 +28,32 @@ void DOTA_Tuner::DetectTuningOperations(
   tuning_rounds++;
 }
 ThreadStallLevels DOTA_Tuner::LocateThreadStates(SystemScores &score) {
-  if (score.total_idle_time > 1) {
-    return kIdle;
-  }
-
-  if (score.memtable_speed < scores.front().memtable_speed * 0.5) {
+  if (score.memtable_speed < max_scores.memtable_speed * 0.5) {
     // speed is slower than before, performance is in the stall area
-    if (score.immutable_number > 1) {
-      if (score.flush_speed_avg >= max_scores.flush_speed_avg * 0.5) {
+    if (score.immutable_number >= 1) {
+      if (score.flush_speed_avg <= max_scores.flush_speed_avg * 0.5) {
         // it's not influenced by the flushing speed
-        return kNeedMoreFlush;
-      } else if (score.flush_speed_var > score.flush_speed_var * 0.8 ||
-                 current_opt.max_background_jobs > 6) {
-        return kBandwidthCongestion;
+        if (current_opt.max_background_jobs > 6) {
+          return kBandwidthCongestion;
+        } else {
+          return kNeedMoreFlush;
+        }
+      } else if (score.l0_num > 0.7) {
+        // it's in the l0 stall
+        return kL0Stall;
       }
-    }
-    if (score.l0_num > 0.7) {
-      // it's in the l0 stall
-      return kNeedMoreCompaction;
-    }
-    if (score.estimate_compaction_bytes > 1) {
+    } else if (score.estimate_compaction_bytes > 0.5) {
       return kPendingBytes;
     }
-  } else if (score.memtable_speed < scores.front().memtable_speed * 0.7) {
-    if (score.l0_num > 0.7) {
-      // it's in the l0 stall
-      return kNeedMoreCompaction;
-    }
-    if (score.estimate_compaction_bytes > 1) {
-      return kPendingBytes;
-    }
-    return kGoodArea;
+  }
+  if (score.total_idle_time > 1.5) {
+    return kIdle;
   }
   return kGoodArea;
 }
 
 BatchSizeStallLevels DOTA_Tuner::LocateBatchStates(SystemScores &score) {
   if (score.flush_speed_avg < max_scores.flush_speed_avg * 0.7) {
-    std::cout << score.flush_speed_avg << "," << scores.front().flush_speed_avg
-              << std::endl;
-    if (score.l0_num > 0.7) {
-      return kL0Stall;
-    }
     if (score.active_size_ratio > 0.5 || score.immutable_number > 1) {
       return kTinyMemtable;
     }
@@ -77,7 +61,7 @@ BatchSizeStallLevels DOTA_Tuner::LocateBatchStates(SystemScores &score) {
       // too many idle threads, the memtable is too large.
       return kOversizeCompaction;
     }
-    if (score.l0_drop_ratio < 0.2) {
+    if (score.l0_drop_ratio < 0.5) {
       return kLowOverlapping;
     }
     if (score.estimate_compaction_bytes > 0.8) {
@@ -198,7 +182,7 @@ void DOTA_Tuner::AdjustmentTuning(std::vector<ChangePoint> *change_list,
                                   SystemScores &score,
                                   ThreadStallLevels thread_levels,
                                   BatchSizeStallLevels batch_levels) {
-//  std::cout << thread_levels << " " << batch_levels << std::endl;
+  std::cout << thread_levels << " " << batch_levels << std::endl;
   // tune for thread number
   auto tuning_op = VoteForOP(score, thread_levels, batch_levels);
   // tune for memtable
