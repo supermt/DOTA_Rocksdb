@@ -28,15 +28,13 @@ void DOTA_Tuner::DetectTuningOperations(
   tuning_rounds++;
 }
 ThreadStallLevels DOTA_Tuner::LocateThreadStates(SystemScores &score) {
-  if (score.memtable_speed < max_scores.memtable_speed * 0.5) {
+  if (score.memtable_speed < max_scores.memtable_speed * 0.7) {
     // speed is slower than before, performance is in the stall area
     if (score.immutable_number >= 1) {
       if (score.flush_speed_avg <= max_scores.flush_speed_avg * 0.5) {
         // it's not influenced by the flushing speed
         if (current_opt.max_background_jobs > 6) {
           return kBandwidthCongestion;
-        } else {
-          return kNeedMoreFlush;
         }
       } else if (score.l0_num > 0.7) {
         // it's in the l0 stall
@@ -53,16 +51,13 @@ ThreadStallLevels DOTA_Tuner::LocateThreadStates(SystemScores &score) {
 }
 
 BatchSizeStallLevels DOTA_Tuner::LocateBatchStates(SystemScores &score) {
-  if (score.flush_speed_avg < max_scores.flush_speed_avg * 0.7) {
+  if (score.flush_speed_avg < max_scores.flush_speed_avg * 0.5) {
     if (score.active_size_ratio > 0.5 || score.immutable_number > 1) {
       return kTinyMemtable;
     }
     if (score.total_idle_time > 1) {
       // too many idle threads, the memtable is too large.
       return kOversizeCompaction;
-    }
-    if (score.l0_drop_ratio < 0.5) {
-      return kLowOverlapping;
     }
     if (score.estimate_compaction_bytes > 0.8) {
       return kOversizeCompaction;
@@ -192,21 +187,25 @@ TuningOP DOTA_Tuner::VoteForOP(SystemScores & /*current_score*/,
                                ThreadStallLevels thread_level,
                                BatchSizeStallLevels batch_level) {
   TuningOP op;
-  if (thread_level < kGoodArea) {
-    op.ThreadOp = kDouble;
-  } else if (thread_level == kGoodArea) {
-    op.ThreadOp = kKeep;
-  } else if (thread_level < kBandwidthCongestion) {
-    op.ThreadOp = kLinearDecrease;
-  } else {
-    op.ThreadOp = kHalf;
+  switch (thread_level) {
+    case kL0Stall:
+      op.ThreadOp = kDouble;
+      break;
+    case kPendingBytes:
+      op.ThreadOp = kLinearIncrease;
+      break;
+    case kGoodArea:
+      op.ThreadOp = kKeep;
+      break;
+    case kIdle:
+      op.ThreadOp = kLinearDecrease;
+      break;
+    case kBandwidthCongestion:
+      op.ThreadOp = kHalf;
+      break;
   }
-  // only update batch when threads no had been changed.
-  //  if (batch_level <= kL0Stall) {
-  //    op.BatchOp = kDouble;
-  //  } else if
 
-  if (batch_level <= kLowOverlapping) {
+  if (batch_level == kTinyMemtable) {
     op.BatchOp = kLinearIncrease;
   } else if (batch_level == kStallFree) {
     op.BatchOp = kKeep;

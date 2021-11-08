@@ -10,7 +10,6 @@
 namespace ROCKSDB_NAMESPACE {
 
 enum ThreadStallLevels : int {
-  kNeedMoreFlush,
   kL0Stall,
   kPendingBytes,
   kGoodArea,
@@ -18,8 +17,7 @@ enum ThreadStallLevels : int {
   kBandwidthCongestion
 };
 enum BatchSizeStallLevels : int {
-  kTinyMemtable,
-  kLowOverlapping,
+  kTinyMemtable,  // tiny memtable
   kStallFree,
   kOversizeCompaction
 };
@@ -123,7 +121,7 @@ class DOTA_Tuner {
         current_sec(0),
         flush_list_accessed(0),
         compaction_list_accessed(0),
-        last_thread_states(kNeedMoreFlush),
+        last_thread_states(kL0Stall),
         last_batch_stat(kTinyMemtable),
         flush_list_from_opt_ptr(running_db->immutable_db_options().flush_stats),
         compaction_list_from_opt_ptr(
