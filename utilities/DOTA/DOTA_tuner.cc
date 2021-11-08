@@ -44,7 +44,7 @@ ThreadStallLevels DOTA_Tuner::LocateThreadStates(SystemScores &score) {
       return kPendingBytes;
     }
   }
-  if (score.total_idle_time > 1.5) {
+  if (score.total_idle_time > 2) {
     return kIdle;
   }
   return kGoodArea;
