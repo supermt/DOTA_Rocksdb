@@ -54,10 +54,6 @@ BatchSizeStallLevels DOTA_Tuner::LocateBatchStates(SystemScores &score) {
     if (score.active_size_ratio > 0.5 || score.immutable_number > 1) {
       return kTinyMemtable;
     }
-    if (score.total_idle_time > 1) {
-      // too many idle threads, the memtable is too large.
-      return kOversizeCompaction;
-    }
     if (score.estimate_compaction_bytes > 0.8) {
       return kOversizeCompaction;
     }
@@ -191,7 +187,7 @@ TuningOP DOTA_Tuner::VoteForOP(SystemScores & /*current_score*/,
       op.ThreadOp = kDouble;
       break;
     case kPendingBytes:
-      op.ThreadOp = kLinearIncrease;
+      op.ThreadOp = kDouble;
       break;
     case kGoodArea:
       op.ThreadOp = kKeep;
