@@ -36,13 +36,16 @@ ThreadStallLevels DOTA_Tuner::LocateThreadStates(SystemScores &score) {
         if (current_opt.max_background_jobs > 6) {
           return kBandwidthCongestion;
         }
-//        else {
-//          return kLowFlush;
-//        }
-      } else if (score.l0_num > 0.7) {
+        //        else {
+        //          return kLowFlush;
+        //        }
+      } else if (score.l0_num > 0.5) {
         // it's in the l0 stall
         return kL0Stall;
       }
+    } else if (score.l0_num > 0.7) {
+      // it's in the l0 stall
+      return kL0Stall;
     } else if (score.estimate_compaction_bytes > 0.5) {
       return kPendingBytes;
     }
@@ -194,9 +197,9 @@ TuningOP DOTA_Tuner::VoteForOP(SystemScores & /*current_score*/,
                                BatchSizeStallLevels batch_level) {
   TuningOP op;
   switch (thread_level) {
-//    case kLowFlush:
-//      op.ThreadOp = kDouble;
-//      break;
+      //    case kLowFlush:
+      //      op.ThreadOp = kDouble;
+      //      break;
     case kL0Stall:
       op.ThreadOp = kLinearIncrease;
       break;
@@ -289,7 +292,7 @@ void DOTA_Tuner::FillUpChangeList(std::vector<ChangePoint> *change_list,
       SetThreadNum(change_list, current_thread_num *= 2);
       break;
     case kLinearIncrease:
-      SetThreadNum(change_list, current_thread_num += 1);
+      SetThreadNum(change_list, current_thread_num += 2);
       break;
     case kLinearDecrease:
       SetThreadNum(change_list, current_thread_num -= 2);
