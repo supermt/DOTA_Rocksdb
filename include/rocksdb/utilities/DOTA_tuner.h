@@ -20,7 +20,7 @@ enum ThreadStallLevels : int {
 enum BatchSizeStallLevels : int {
   kTinyMemtable,  // tiny memtable
   kStallFree,
-  kOversizeCompaction
+  kOverFrequent
 };
 
 struct SystemScores {
@@ -41,6 +41,7 @@ struct SystemScores {
   double disk_bandwidth;   // avg
   double total_idle_time;  // calculate by idle calculating,flush and compaction
                            // stats separately
+  int flush_numbers;
 
   SystemScores() {
     memtable_speed = 0.0;
@@ -53,6 +54,7 @@ struct SystemScores {
     estimate_compaction_bytes = 0.0;
     disk_bandwidth = 0.0;
     total_idle_time = 0.0;
+    flush_numbers = 0;
   }
   void Reset() {
     memtable_speed = 0.0;
@@ -65,6 +67,7 @@ struct SystemScores {
     estimate_compaction_bytes = 0.0;
     disk_bandwidth = 0.0;
     total_idle_time = 0.0;
+    flush_numbers = 0;
   }
   SystemScores operator-(const SystemScores& a);
 };
@@ -167,6 +170,9 @@ class DOTA_Tuner {
     }
     if (current_score.total_idle_time > max_scores.total_idle_time) {
       max_scores.total_idle_time = current_score.total_idle_time;
+    }
+    if (current_score.flush_numbers > max_scores.flush_numbers) {
+      max_scores.flush_numbers = current_score.flush_numbers;
     }
   }
 

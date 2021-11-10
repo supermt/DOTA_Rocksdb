@@ -52,14 +52,20 @@ ThreadStallLevels DOTA_Tuner::LocateThreadStates(SystemScores &score) {
 }
 
 BatchSizeStallLevels DOTA_Tuner::LocateBatchStates(SystemScores &score) {
-  if (score.flush_speed_avg < max_scores.flush_speed_avg * 0.5) {
-    if (score.immutable_number > 1) {
-      return kTinyMemtable;
+  if (score.memtable_speed < max_scores.memtable_speed * 0.7) {
+    if (score.flush_speed_avg < max_scores.flush_speed_avg * 0.5) {
+      if (score.active_size_ratio > 0.7 || score.immutable_number > 1) {
+        return kTinyMemtable;
+      }
     }
-    if (score.estimate_compaction_bytes > 0.8) {
-      return kOversizeCompaction;
+    if (score.flush_numbers < max_scores.flush_numbers * 0.5) {
+      return kOverFrequent;
     }
+  } else {
+    // memtable speed quick enough, hold the position.
+    return kStallFree;
   }
+
   return kStallFree;
 };
 
@@ -88,7 +94,8 @@ SystemScores DOTA_Tuner::ScoreTheSystem() {
     current_score.disk_bandwidth += temp.total_bytes;
   }
   int l0_compaction = 0;
-
+  current_score.flush_numbers = flush_metric_list.size();
+  //  std::cout << current_score.flush_numbers << std::endl;
   uint64_t max_pending_bytes = 0;
   for (uint64_t i = compaction_list_accessed; i < compaction_result_length;
        i++) {
@@ -174,7 +181,7 @@ void DOTA_Tuner::AdjustmentTuning(std::vector<ChangePoint> *change_list,
                                   SystemScores &score,
                                   ThreadStallLevels thread_levels,
                                   BatchSizeStallLevels batch_levels) {
-  std::cout << thread_levels << " " << batch_levels << std::endl;
+  //  std::cout << thread_levels << " " << batch_levels << std::endl;
   // tune for thread number
   auto tuning_op = VoteForOP(score, thread_levels, batch_levels);
   // tune for memtable
@@ -190,28 +197,33 @@ TuningOP DOTA_Tuner::VoteForOP(SystemScores & /*current_score*/,
       break;
     case kL0Stall:
       op.ThreadOp = kDouble;
+      op.BatchOp = kDouble;
       break;
     case kPendingBytes:
       op.ThreadOp = kLinearIncrease;
+      op.BatchOp = kKeep;
       break;
     case kGoodArea:
       op.ThreadOp = kKeep;
+      op.BatchOp = kKeep;
       break;
     case kIdle:
       op.ThreadOp = kLinearDecrease;
+      op.BatchOp = kKeep;
       break;
     case kBandwidthCongestion:
       op.ThreadOp = kHalf;
+      op.BatchOp = kHalf;
       break;
   }
 
-  if (batch_level == kTinyMemtable) {
-    op.BatchOp = kLinearIncrease;
-  } else if (batch_level == kStallFree) {
-    op.BatchOp = kKeep;
-  } else {
-    op.BatchOp = kHalf;
-  }
+  //  if (batch_level == kTinyMemtable) {
+  //    op.BatchOp = kLinearIncrease;
+  //  } else if (batch_level == kStallFree) {
+  //    op.BatchOp = kKeep;
+  //  } else {
+  //    op.BatchOp = kHalf;
+  //  }
 
   return op;
 }
