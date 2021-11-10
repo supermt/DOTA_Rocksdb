@@ -197,33 +197,28 @@ TuningOP DOTA_Tuner::VoteForOP(SystemScores & /*current_score*/,
       break;
     case kL0Stall:
       op.ThreadOp = kDouble;
-      op.BatchOp = kDouble;
       break;
     case kPendingBytes:
       op.ThreadOp = kLinearIncrease;
-      op.BatchOp = kKeep;
       break;
     case kGoodArea:
       op.ThreadOp = kKeep;
-      op.BatchOp = kKeep;
       break;
     case kIdle:
       op.ThreadOp = kLinearDecrease;
-      op.BatchOp = kKeep;
       break;
     case kBandwidthCongestion:
       op.ThreadOp = kHalf;
-      op.BatchOp = kHalf;
       break;
   }
 
-  //  if (batch_level == kTinyMemtable) {
-  //    op.BatchOp = kLinearIncrease;
-  //  } else if (batch_level == kStallFree) {
-  //    op.BatchOp = kKeep;
-  //  } else {
-  //    op.BatchOp = kHalf;
-  //  }
+  if (batch_level == kTinyMemtable) {
+    op.BatchOp = kLinearIncrease;
+  } else if (batch_level == kStallFree) {
+    op.BatchOp = kKeep;
+  } else {
+    op.BatchOp = kHalf;
+  }
 
   return op;
 }
