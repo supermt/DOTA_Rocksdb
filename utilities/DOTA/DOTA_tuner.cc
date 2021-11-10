@@ -57,9 +57,9 @@ BatchSizeStallLevels DOTA_Tuner::LocateBatchStates(SystemScores &score) {
       if (score.active_size_ratio > 0.7 || score.immutable_number > 1) {
         return kTinyMemtable;
       }
-
     }
-    if (score.flush_numbers < max_scores.flush_numbers * 0.3) {
+    if (score.flush_numbers < max_scores.flush_numbers * 0.3 &&
+        score.flush_numbers > 3) {
       return kOverFrequent;
     }
   } else {
