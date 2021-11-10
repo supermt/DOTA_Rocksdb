@@ -139,7 +139,8 @@ class DOTA_Tuner {
     this->total_ops_done_ptr_ = total_ops_done_ptr;
   }
   inline void UpdateMaxScore(SystemScores& current_score) {
-    if (current_score.memtable_speed > scores.front().memtable_speed * 2) {
+    if (!scores.empty() &&
+        current_score.memtable_speed > scores.front().memtable_speed * 2) {
       // this would be an error
       return;
     }
