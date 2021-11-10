@@ -45,7 +45,7 @@ ThreadStallLevels DOTA_Tuner::LocateThreadStates(SystemScores &score) {
     } else if (score.estimate_compaction_bytes > 0.5) {
       return kPendingBytes;
     }
-  } else if (score.total_idle_time > 2) {
+  } else if (score.total_idle_time > 2.5) {
     return kIdle;
   }
   return kGoodArea;
@@ -54,17 +54,14 @@ ThreadStallLevels DOTA_Tuner::LocateThreadStates(SystemScores &score) {
 BatchSizeStallLevels DOTA_Tuner::LocateBatchStates(SystemScores &score) {
   if (score.memtable_speed < max_scores.memtable_speed * 0.7) {
     if (score.flush_speed_avg < max_scores.flush_speed_avg * 0.5) {
-      if (score.active_size_ratio > 0.7 || score.immutable_number > 1) {
+      if (score.active_size_ratio > 0.5 && score.immutable_number >= 1) {
+        return kTinyMemtable;
+      } else if (current_opt.max_background_jobs > 6 || score.l0_num > 0.9) {
         return kTinyMemtable;
       }
     }
-    if (score.flush_numbers < max_scores.flush_numbers * 0.3 &&
-        score.flush_numbers > 3) {
-      return kOverFrequent;
-    }
-  } else {
-    // memtable speed quick enough, hold the position.
-    return kStallFree;
+  } else if (score.flush_numbers < max_scores.flush_numbers * 0.3) {
+    return kOverFrequent;
   }
 
   return kStallFree;
