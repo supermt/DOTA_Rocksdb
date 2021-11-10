@@ -93,6 +93,9 @@ SystemScores DOTA_Tuner::ScoreTheSystem() {
     flush_metric_list.push_back(temp);
     current_score.flush_speed_avg += temp.write_out_bandwidth;
     current_score.disk_bandwidth += temp.total_bytes;
+    if (current_score.l0_num > temp.l0_files) {
+      current_score.l0_num = temp.l0_files;
+    }
   }
   int l0_compaction = 0;
   current_score.flush_numbers = flush_metric_list.size();
