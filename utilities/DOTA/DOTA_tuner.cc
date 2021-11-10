@@ -35,9 +35,10 @@ ThreadStallLevels DOTA_Tuner::LocateThreadStates(SystemScores &score) {
         // it's not influenced by the flushing speed
         if (current_opt.max_background_jobs > 6) {
           return kBandwidthCongestion;
-        } else {
-          return kLowFlush;
         }
+//        else {
+//          return kLowFlush;
+//        }
       } else if (score.l0_num > 0.7) {
         // it's in the l0 stall
         return kL0Stall;
@@ -193,9 +194,9 @@ TuningOP DOTA_Tuner::VoteForOP(SystemScores & /*current_score*/,
                                BatchSizeStallLevels batch_level) {
   TuningOP op;
   switch (thread_level) {
-    case kLowFlush:
-      op.ThreadOp = kDouble;
-      break;
+//    case kLowFlush:
+//      op.ThreadOp = kDouble;
+//      break;
     case kL0Stall:
       op.ThreadOp = kLinearIncrease;
       break;

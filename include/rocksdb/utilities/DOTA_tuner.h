@@ -10,7 +10,7 @@
 namespace ROCKSDB_NAMESPACE {
 
 enum ThreadStallLevels : int {
-  kLowFlush,
+//  kLowFlush,
   kL0Stall,
   kPendingBytes,
   kGoodArea,
