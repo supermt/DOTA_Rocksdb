@@ -197,7 +197,7 @@ TuningOP DOTA_Tuner::VoteForOP(SystemScores & /*current_score*/,
       op.ThreadOp = kDouble;
       break;
     case kL0Stall:
-      op.ThreadOp = kDouble;
+      op.ThreadOp = kLinearIncrease;
       break;
     case kPendingBytes:
       op.ThreadOp = kLinearIncrease;
@@ -218,7 +218,7 @@ TuningOP DOTA_Tuner::VoteForOP(SystemScores & /*current_score*/,
   } else if (batch_level == kStallFree) {
     op.BatchOp = kKeep;
   } else {
-    op.BatchOp = kHalf;
+    op.BatchOp = kLinearDecrease;
   }
 
   return op;
