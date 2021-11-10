@@ -19,6 +19,7 @@ struct FlushMetrics {
   uint64_t total_bytes = 0;
   double memtable_ratio = 0.0;
   double write_out_bandwidth = 0.0;
+  int l0_files = 0;
 };
 
 struct HitPosition {

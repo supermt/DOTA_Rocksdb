@@ -35,31 +35,39 @@ ThreadStallLevels DOTA_Tuner::LocateThreadStates(SystemScores &score) {
         // it's not influenced by the flushing speed
         if (current_opt.max_background_jobs > 6) {
           return kBandwidthCongestion;
-        } else {
-          return kLowFlush;
         }
-      } else if (score.l0_num > 0.7) {
+        //        else {
+        //          return kLowFlush;
+        //        }
+      } else if (score.l0_num > 0.5) {
         // it's in the l0 stall
         return kL0Stall;
       }
+    } else if (score.l0_num > 0.7) {
+      // it's in the l0 stall
+      return kL0Stall;
     } else if (score.estimate_compaction_bytes > 0.5) {
       return kPendingBytes;
     }
-  } else if (score.total_idle_time > 2) {
+  } else if (score.total_idle_time > 2.5) {
     return kIdle;
   }
   return kGoodArea;
 }
 
 BatchSizeStallLevels DOTA_Tuner::LocateBatchStates(SystemScores &score) {
-  if (score.flush_speed_avg < max_scores.flush_speed_avg * 0.5) {
-    if (score.immutable_number > 1) {
-      return kTinyMemtable;
+  if (score.memtable_speed < max_scores.memtable_speed * 0.7) {
+    if (score.flush_speed_avg < max_scores.flush_speed_avg * 0.5) {
+      if (score.active_size_ratio > 0.5 && score.immutable_number >= 1) {
+        return kTinyMemtable;
+      } else if (current_opt.max_background_jobs > 6 || score.l0_num > 0.9) {
+        return kTinyMemtable;
+      }
     }
-    if (score.estimate_compaction_bytes > 0.8) {
-      return kOversizeCompaction;
-    }
+  } else if (score.flush_numbers < max_scores.flush_numbers * 0.3) {
+    return kOverFrequent;
   }
+
   return kStallFree;
 };
 
@@ -86,9 +94,13 @@ SystemScores DOTA_Tuner::ScoreTheSystem() {
     flush_metric_list.push_back(temp);
     current_score.flush_speed_avg += temp.write_out_bandwidth;
     current_score.disk_bandwidth += temp.total_bytes;
+    if (current_score.l0_num > temp.l0_files) {
+      current_score.l0_num = temp.l0_files;
+    }
   }
   int l0_compaction = 0;
-
+  current_score.flush_numbers = flush_metric_list.size();
+  //  std::cout << current_score.flush_numbers << std::endl;
   uint64_t max_pending_bytes = 0;
   for (uint64_t i = compaction_list_accessed; i < compaction_result_length;
        i++) {
@@ -174,7 +186,7 @@ void DOTA_Tuner::AdjustmentTuning(std::vector<ChangePoint> *change_list,
                                   SystemScores &score,
                                   ThreadStallLevels thread_levels,
                                   BatchSizeStallLevels batch_levels) {
-  std::cout << thread_levels << " " << batch_levels << std::endl;
+  //  std::cout << thread_levels << " " << batch_levels << std::endl;
   // tune for thread number
   auto tuning_op = VoteForOP(score, thread_levels, batch_levels);
   // tune for memtable
@@ -185,11 +197,11 @@ TuningOP DOTA_Tuner::VoteForOP(SystemScores & /*current_score*/,
                                BatchSizeStallLevels batch_level) {
   TuningOP op;
   switch (thread_level) {
-    case kLowFlush:
-      op.ThreadOp = kDouble;
-      break;
+      //    case kLowFlush:
+      //      op.ThreadOp = kDouble;
+      //      break;
     case kL0Stall:
-      op.ThreadOp = kDouble;
+      op.ThreadOp = kLinearIncrease;
       break;
     case kPendingBytes:
       op.ThreadOp = kLinearIncrease;
@@ -210,7 +222,7 @@ TuningOP DOTA_Tuner::VoteForOP(SystemScores & /*current_score*/,
   } else if (batch_level == kStallFree) {
     op.BatchOp = kKeep;
   } else {
-    op.BatchOp = kHalf;
+    op.BatchOp = kLinearDecrease;
   }
 
   return op;
@@ -280,7 +292,7 @@ void DOTA_Tuner::FillUpChangeList(std::vector<ChangePoint> *change_list,
       SetThreadNum(change_list, current_thread_num *= 2);
       break;
     case kLinearIncrease:
-      SetThreadNum(change_list, current_thread_num += 1);
+      SetThreadNum(change_list, current_thread_num += 2);
       break;
     case kLinearDecrease:
       SetThreadNum(change_list, current_thread_num -= 2);

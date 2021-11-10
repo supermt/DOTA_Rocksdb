@@ -447,6 +447,8 @@ Status FlushJob::WriteLevel0Table() {
     metrics.memtable_ratio += (double)mem->ApproximateMemoryUsage() /
                               mutable_cf_options_.write_buffer_size;
   }
+  auto vfs = cfd_->current()->storage_info();
+  metrics.l0_files = vfs->NumLevelFiles(vfs->base_level());
   metrics.memtable_ratio /= mems_.size();
   metrics.write_out_bandwidth = stats.bytes_written / stats.micros;
 
