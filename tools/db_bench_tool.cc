@@ -634,6 +634,9 @@ DEFINE_bool(detailed_running_stats, false,
 DEFINE_int64(quicksand_fold_num, 4,
              "folded times of the target benchmark for better quicksand effect "
              "observation");
+
+DEFINE_bool(print_stall_influence, false,
+            "print the stall influence after the fillrandom");
 // end jinghuan
 DEFINE_int64(tuner_step_size, 0,
              "time gap between two scanning process, or the time window size"
@@ -2151,6 +2154,7 @@ class Stats {
                 it->second->ToString().c_str());
       }
     }
+
     if (FLAGS_report_thread_idle) {
       std::string result_string = FLAGS_env->GetThreadPoolTimeStateString();
       std::cout << result_string;
@@ -4462,10 +4466,50 @@ class Benchmark {
     DoDeterministicCompact(thread, open_options_.compaction_style,
                            UNIQUE_RANDOM);
   }
+  void PrintOutStallInfluenceData() {
+    auto dbimpl = static_cast<DBImpl*>(db_.db);
+    for (auto hit_point : *dbimpl->immutable_db_options().hit_records) {
+      std::cout << "flag value: " << Slice(hit_point.key).ToString(true)
+                << " has been hit " << hit_point.captured_position.size()
+                << " times. " << std::endl;
+      std::cout << "[";
+      for (int hit_level : hit_point.captured_position) {
+        std::cout << " " << hit_level << " ";
+      }
+      std::cout << "]" << std::endl;
+    }
+    auto version =
+        dbimpl->GetVersionSet()->GetColumnFamilySet()->GetDefault()->current();
+    auto cfd = version->cfd();
+    std::cout << "total number of Memtables "
+              << cfd->imm()->NumFlushed() + cfd->imm()->NumNotFlushed()
+              << std::endl;
+    uint64_t max_pending_bytes = 0;
+    int max_immutable_num = 0;
+    for (auto metric : *dbimpl->immutable_db_options().job_stats) {
+      if (metric.current_pending_bytes > max_pending_bytes)
+        max_pending_bytes = metric.current_pending_bytes;
+      if (metric.immu_num > max_immutable_num) {
+        max_immutable_num = metric.immu_num;
+      }
+    }
+    std::cout << "peak memtable size: " << max_immutable_num << std::endl;
+    std::cout << "max pending bytes: " << max_pending_bytes << std::endl;
+    auto vfs = cfd->current()->storage_info();
+    std::cout << "stops with pending bytes: "
+              << vfs->estimated_compaction_needed_bytes() << std::endl;
+    std::cout << "stops with Total SST file size: "
+              << cfd->GetTotalSstFilesSize() << std::endl;
+  }
 
   void WriteSeq(ThreadState* thread) { DoWrite(thread, SEQUENTIAL); }
 
-  void WriteRandom(ThreadState* thread) { DoWrite(thread, RANDOM); }
+  void WriteRandom(ThreadState* thread) {
+    DoWrite(thread, RANDOM);
+    if (FLAGS_print_stall_influence) {
+      PrintOutStallInfluenceData();
+    }
+  }
 
   void WriteUniqueRandom(ThreadState* thread) {
     DoWrite(thread, UNIQUE_RANDOM);
@@ -5727,37 +5771,11 @@ class Benchmark {
     }
 
     DoWrite(thread, RANDOM);
-    for (auto hit_point : *dbimpl->immutable_db_options().hit_records) {
-      std::cout << "flag value: " << Slice(hit_point.key).ToString(true)
-                << " has been hit " << hit_point.captured_position.size()
-                << " times. " << std::endl;
-      std::cout << "[";
-      for (int hit_level : hit_point.captured_position) {
-        std::cout << " " << hit_level << " ";
-      }
-      std::cout << "]" << std::endl;
-    }
+    PrintOutStallInfluenceData();
     auto version =
         dbimpl->GetVersionSet()->GetColumnFamilySet()->GetDefault()->current();
     auto cfd = version->cfd();
-    std::cout << "total number of Memtables "
-              << cfd->imm()->NumFlushed() + cfd->imm()->NumNotFlushed()
-              << std::endl;
-    uint64_t max_pending_bytes = 0;
-    int max_immutable_num = 0;
-    for (auto metric : *dbimpl->immutable_db_options().job_stats) {
-      if (metric.current_pending_bytes > max_pending_bytes)
-        max_pending_bytes = metric.current_pending_bytes;
-      if (metric.immu_num > max_immutable_num) {
-        max_immutable_num = metric.immu_num;
-      }
-    }
-    std::cout << "peak memtable size " << max_immutable_num << std::endl;
-    std::cout << "max pending bytes " << max_pending_bytes << std::endl;
     auto vfs = cfd->current()->storage_info();
-    std::cout << "stops with pending bytes "
-              << vfs->estimated_compaction_needed_bytes() << std::endl;
-
     // scan through all sstables.
     std::cout << "total live data size " << vfs->EstimateLiveDataSize()
               << std::endl;
