@@ -631,7 +631,7 @@ DEFINE_string(change_points, "",
 
 // auto-tuner related options
 
-DEFINE_string(ycsb_workload, "ycsb_workload/workloada", "The workload of YCSB");
+DEFINE_string(ycsb_workload, "", "The workload of YCSB");
 DEFINE_int64(load_num, 100000, "Num of operations in loading phrase");
 DEFINE_int64(running_num, 100000, "Num of operations in running phrase");
 DEFINE_bool(DOTA_enabled, false, "Whether trigger the DOTA framework");
@@ -3094,6 +3094,12 @@ class Benchmark {
         method = &Benchmark::WriteRandom;
       } else if (name == "ycsb") {
         fresh_db = true;
+        method = &Benchmark::YCSBIntegrate;
+      } else if (name == "ycsb_load") {
+        fresh_db = true;
+        method = &Benchmark::YCSBLoader;
+      } else if (name == "ycsb_run") {
+        fresh_db = true;
         method = &Benchmark::YCSBRunner;
       } else if (name == "filluniquerandom") {
         fresh_db = true;
@@ -4517,19 +4523,78 @@ class Benchmark {
   }
 
   void WriteSeq(ThreadState* thread) { DoWrite(thread, SEQUENTIAL); }
+  void YCSBLoader(ThreadState* thread) {
+    std::cout << "YCSB workload : " << FLAGS_ycsb_workload << std::endl;
+    FLAGS_num = FLAGS_load_num + FLAGS_running_num;
+    ycsbc::CoreWorkload wl;
+    ycsbc::utils::Properties props;
+    if (!FLAGS_ycsb_workload.empty()) {
+      std::ifstream input(FLAGS_ycsb_workload);
+      props.Load(input);
+    }
+    if (props.GetProperty(ycsbc::CoreWorkload::RECORD_COUNT_PROPERTY).empty()) {
+      props.SetProperty(ycsbc::CoreWorkload::RECORD_COUNT_PROPERTY,
+                        std::to_string(FLAGS_load_num));
+    }
+    if (props.GetProperty(ycsbc::CoreWorkload::OPERATION_COUNT_PROPERTY)
+            .empty()) {
+      props.SetProperty(ycsbc::CoreWorkload::OPERATION_COUNT_PROPERTY,
+                        std::to_string(FLAGS_load_num));
+    }
+    wl.Init(props);
 
+    YCSBWorking(thread, &wl, true, false);
+    if (FLAGS_print_stall_influence) {
+      PrintOutStallInfluenceData();
+    }
+  }
   void YCSBRunner(ThreadState* thread) {
     std::cout << "YCSB workload : " << FLAGS_ycsb_workload << std::endl;
     FLAGS_num = FLAGS_load_num + FLAGS_running_num;
     ycsbc::CoreWorkload wl;
     ycsbc::utils::Properties props;
-    props.SetProperty(ycsbc::CoreWorkload::RECORD_COUNT_PROPERTY,
-                      std::to_string(FLAGS_load_num));
-    props.SetProperty(ycsbc::CoreWorkload::OPERATION_COUNT_PROPERTY,
-                      std::to_string(FLAGS_running_num));
+    if (!FLAGS_ycsb_workload.empty()) {
+      std::ifstream input(FLAGS_ycsb_workload);
+      props.Load(input);
+    }
+    if (props.GetProperty(ycsbc::CoreWorkload::RECORD_COUNT_PROPERTY).empty()) {
+      props.SetProperty(ycsbc::CoreWorkload::RECORD_COUNT_PROPERTY,
+                        std::to_string(FLAGS_load_num));
+    }
+    if (props.GetProperty(ycsbc::CoreWorkload::OPERATION_COUNT_PROPERTY)
+            .empty()) {
+      props.SetProperty(ycsbc::CoreWorkload::OPERATION_COUNT_PROPERTY,
+                        std::to_string(FLAGS_load_num));
+    }
     wl.Init(props);
 
-    YCSBWorking(thread, &wl);
+    YCSBWorking(thread, &wl, false, true);
+    if (FLAGS_print_stall_influence) {
+      PrintOutStallInfluenceData();
+    }
+  }
+
+  void YCSBIntegrate(ThreadState* thread) {
+    std::cout << "YCSB workload : " << FLAGS_ycsb_workload << std::endl;
+    FLAGS_num = FLAGS_load_num + FLAGS_running_num;
+    ycsbc::CoreWorkload wl;
+    ycsbc::utils::Properties props;
+    if (!FLAGS_ycsb_workload.empty()) {
+      std::ifstream input(FLAGS_ycsb_workload);
+      props.Load(input);
+    }
+    if (props.GetProperty(ycsbc::CoreWorkload::RECORD_COUNT_PROPERTY).empty()) {
+      props.SetProperty(ycsbc::CoreWorkload::RECORD_COUNT_PROPERTY,
+                        std::to_string(FLAGS_load_num));
+    }
+    if (props.GetProperty(ycsbc::CoreWorkload::OPERATION_COUNT_PROPERTY)
+            .empty()) {
+      props.SetProperty(ycsbc::CoreWorkload::OPERATION_COUNT_PROPERTY,
+                        std::to_string(FLAGS_load_num));
+    }
+    wl.Init(props);
+
+    YCSBWorking(thread, &wl, true, true);
     if (FLAGS_print_stall_influence) {
       PrintOutStallInfluenceData();
     }
@@ -4553,8 +4618,8 @@ class Benchmark {
         : rand_(rand), mode_(mode), num_(num), next_(0) {
       if (mode_ == UNIQUE_RANDOM) {
         // NOTE: if memory consumption of this approach becomes a concern,
-        // we can either break it into pieces and only random shuffle a section
-        // each time. Alternatively, use a bit map implementation
+        // we can either break it into pieces and only random shuffle a
+        // section each time. Alternatively, use a bit map implementation
         // (https://reviews.facebook.net/differential/diff/54627/)
         values_.resize(num_);
         for (uint64_t i = 0; i < num_; ++i) {
@@ -4619,7 +4684,8 @@ class Benchmark {
     return FLAGS_sine_a * sin((FLAGS_sine_b * x) + FLAGS_sine_c) + FLAGS_sine_d;
   }
 
-  void YCSBWorking(ThreadState* thread, ycsbc::CoreWorkload* workload) {
+  void YCSBWorking(ThreadState* thread, ycsbc::CoreWorkload* workload, int load,
+                   int run) {
     int remain_loading = FLAGS_load_num;
     int remain_running = FLAGS_running_num;
     const int test_duration = FLAGS_duration;
@@ -4633,115 +4699,120 @@ class Benchmark {
     Status s;
     RandomGenerator gen;
     int64_t bytes = 0;
-
     Duration duration = loading_duration;
-    while (!duration.Done(entries_per_batch_)) {
-      DB* db = SelectDB(thread);
-      if (duration.GetStage() != stage) {
-        stage = duration.GetStage();
-        if (db_.db != nullptr) {
-          db_.CreateNewCf(open_options_, stage);
-        } else {
-          for (auto& input_db : multi_dbs_) {
-            input_db.CreateNewCf(open_options_, stage);
+    if (load) {
+      while (!duration.Done(entries_per_batch_)) {
+        DB* db = SelectDB(thread);
+        if (duration.GetStage() != stage) {
+          stage = duration.GetStage();
+          if (db_.db != nullptr) {
+            db_.CreateNewCf(open_options_, stage);
+          } else {
+            for (auto& input_db : multi_dbs_) {
+              input_db.CreateNewCf(open_options_, stage);
+            }
           }
         }
-      }
-      const std::string key = workload->BuildKeyName();
-      Slice val = gen.Generate();
-      batch.Put(key, val);
+        const std::string key = workload->BuildKeyName();
+        Slice val = gen.Generate();
+        batch.Put(key, val);
 
-      int64_t batch_bytes = 0;
-      for (int64_t j = 0; j < entries_per_batch_; j++) {
-        batch_bytes += val.size() + key.size();
-        bytes += val.size() + key.size();
+        int64_t batch_bytes = 0;
+        for (int64_t j = 0; j < entries_per_batch_; j++) {
+          batch_bytes += val.size() + key.size();
+          bytes += val.size() + key.size();
+        }
+        if (thread->shared->write_rate_limiter.get() != nullptr) {
+          thread->shared->write_rate_limiter->Request(
+              batch_bytes, Env::IO_HIGH, nullptr /* stats */,
+              RateLimiter::OpType::kWrite);
+          thread->stats.ResetLastOpTime();
+        }
+        thread->stats.FinishedOps(nullptr, db, entries_per_batch_, kWrite);
       }
-      if (thread->shared->write_rate_limiter.get() != nullptr) {
-        thread->shared->write_rate_limiter->Request(
-            batch_bytes, Env::IO_HIGH, nullptr /* stats */,
-            RateLimiter::OpType::kWrite);
-        thread->stats.ResetLastOpTime();
-      }
-      thread->stats.FinishedOps(nullptr, db, entries_per_batch_, kWrite);
+      thread->stats.AddBytes(bytes);
     }
-    thread->stats.AddBytes(bytes);
-    duration = running_duration;
 
-    Status op_status;
-    int read_count = 0;
-    int found_count = 0;
-    int blind_updates = 0;
-    rocksdb::ReadOptions r_op;
-    rocksdb::WriteOptions w_op;
-    Slice val;
+    if (run) {
+      duration = running_duration;
 
-    while (!duration.Done(1)) {
-      if (duration.GetStage() != stage) {
-        stage = duration.GetStage();
-        if (db_.db != nullptr) {
-          db_.CreateNewCf(open_options_, stage);
-        } else {
-          for (auto& db : multi_dbs_) {
-            db.CreateNewCf(open_options_, stage);
+      Status op_status;
+      int read_count = 0;
+      int found_count = 0;
+      int blind_updates = 0;
+      rocksdb::ReadOptions r_op;
+      rocksdb::WriteOptions w_op;
+      Slice val;
+
+      while (!duration.Done(1)) {
+        if (duration.GetStage() != stage) {
+          stage = duration.GetStage();
+          if (db_.db != nullptr) {
+            db_.CreateNewCf(open_options_, stage);
+          } else {
+            for (auto& db : multi_dbs_) {
+              db.CreateNewCf(open_options_, stage);
+            }
           }
         }
+        std::string data;
+        uint64_t key_num = workload->NextTransactionKeyNum();
+        const std::string key = workload->BuildKeyName(key_num);
+        DB* db = SelectDB(thread);
+        switch (workload->NextOp()) {
+          case ycsbc::READ: {
+            op_status = db_.db->Get(r_op, key, &data);
+            if (op_status.ok()) {
+              found_count++;
+              bytes += key.size() + data.size();
+            }
+            read_count++;
+            thread->stats.FinishedOps(nullptr, db, entries_per_batch_, kRead);
+          } break;
+          case ycsbc::UPDATE: {
+            val = gen.Generate();
+            // In rocksdb, update is just another put operation.
+            op_status = db_.db->Put(w_op, key, val);
+            thread->stats.FinishedOps(nullptr, db, entries_per_batch_, kUpdate);
+          } break;
+          case ycsbc::INSERT: {
+            val = gen.Generate();
+            // In rocksdb, update is just another put operation.
+            op_status = db_.db->Put(w_op, key, val);
+            thread->stats.FinishedOps(nullptr, db, entries_per_batch_, kWrite);
+          } break;
+          case ycsbc::SCAN: {
+            Iterator* db_iter = db_.db->NewIterator(rocksdb::ReadOptions());
+            db_iter->Seek(key);
+            int len = workload->scan_len_chooser_->Next();
+            for (int i = 0; db_iter->Valid() && i < len; i++) {
+              data = db_iter->value().ToString();
+              db_iter->Next();
+            }
+            thread->stats.FinishedOps(nullptr, db, entries_per_batch_, kSeek);
+            delete db_iter;
+          } break;
+          case ycsbc::READMODIFYWRITE: {
+            op_status = db_.db->Get(r_op, key, &data);
+            read_count++;
+            if (op_status.IsNotFound()) {
+              blind_updates++;
+            }
+            val = gen.Generate();
+            op_status = db_.db->Put(w_op, key, val);
+            thread->stats.FinishedOps(nullptr, db, entries_per_batch_, kUpdate);
+          } break;
+          case ycsbc::DELETE: {
+            op_status = db_.db->Delete(w_op, key);
+            thread->stats.FinishedOps(nullptr, db, entries_per_batch_, kDelete);
+          } break;
+          case ycsbc::MAXOPTYPE:
+            throw ycsbc::utils::Exception(
+                "Operation request is not recognized!");
+        }
       }
-      std::string data;
-      uint64_t key_num = workload->NextTransactionKeyNum();
-      const std::string key = workload->BuildKeyName(key_num);
-      DB* db = SelectDB(thread);
-      switch (workload->NextOp()) {
-        case ycsbc::READ: {
-          op_status = db_.db->Get(r_op, key, &data);
-          if (op_status.ok()) {
-            found_count++;
-            bytes += key.size() + data.size();
-          }
-          read_count++;
-          thread->stats.FinishedOps(nullptr, db, entries_per_batch_, kRead);
-        } break;
-        case ycsbc::UPDATE: {
-          val = gen.Generate();
-          // In rocksdb, update is just another put operation.
-          op_status = db_.db->Put(w_op, key, val);
-          thread->stats.FinishedOps(nullptr, db, entries_per_batch_, kUpdate);
-        } break;
-        case ycsbc::INSERT: {
-          val = gen.Generate();
-          // In rocksdb, update is just another put operation.
-          op_status = db_.db->Put(w_op, key, val);
-          thread->stats.FinishedOps(nullptr, db, entries_per_batch_, kWrite);
-        } break;
-        case ycsbc::SCAN: {
-          Iterator* db_iter = db_.db->NewIterator(rocksdb::ReadOptions());
-          db_iter->Seek(key);
-          int len = workload->scan_len_chooser_->Next();
-          for (int i = 0; db_iter->Valid() && i < len; i++) {
-            data = db_iter->value().ToString();
-            db_iter->Next();
-          }
-          thread->stats.FinishedOps(nullptr, db, entries_per_batch_, kSeek);
-          delete db_iter;
-        } break;
-        case ycsbc::READMODIFYWRITE: {
-          op_status = db_.db->Get(r_op, key, &data);
-          read_count++;
-          if (op_status.IsNotFound()) {
-            blind_updates++;
-          }
-          val = gen.Generate();
-          op_status = db_.db->Put(w_op, key, val);
-          thread->stats.FinishedOps(nullptr, db, entries_per_batch_, kUpdate);
-        } break;
-        case ycsbc::DELETE: {
-          op_status = db_.db->Delete(w_op, key);
-          thread->stats.FinishedOps(nullptr, db, entries_per_batch_, kDelete);
-        } break;
-        case ycsbc::MAXOPTYPE:
-          throw ycsbc::utils::Exception("Operation request is not recognized!");
-      }
+      thread->stats.AddBytes(bytes);
     }
-    thread->stats.AddBytes(bytes);
   }
   void DoWrite(ThreadState* thread, WriteMode write_mode) {
     const int test_duration = write_mode == RANDOM ? FLAGS_duration : 0;
@@ -5314,8 +5385,8 @@ class Benchmark {
     while (key_rand < FLAGS_num) {
       DBWithColumnFamilies* db_with_cfh = SelectDBWithCfh(thread);
       // We use same key_rand as seed for key and column family so that we can
-      // deterministically find the cfh corresponding to a particular key, as it
-      // is done in DoWrite method.
+      // deterministically find the cfh corresponding to a particular key, as
+      // it is done in DoWrite method.
       GenerateKeyFromInt(key_rand, FLAGS_num, &key);
       key_rand++;
       read++;
@@ -5481,8 +5552,8 @@ class Benchmark {
     while (!duration.Done(1)) {
       DBWithColumnFamilies* db_with_cfh = SelectDBWithCfh(thread);
       // We use same key_rand as seed for key and column family so that we can
-      // deterministically find the cfh corresponding to a particular key, as it
-      // is done in DoWrite method.
+      // deterministically find the cfh corresponding to a particular key, as
+      // it is done in DoWrite method.
       if (entries_per_batch_ > 1 && FLAGS_multiread_stride) {
         if (++num_keys == entries_per_batch_) {
           num_keys = 0;
@@ -5767,15 +5838,16 @@ class Benchmark {
   // the two-term-exponential distribution: f(x) = a*exp(b*x) + c*exp(d*x).
   // However, we cannot directly use the inverse function to decide a
   // key-range from a random distribution. To achieve it, we create a list of
-  // KeyrangeUnit, each KeyrangeUnit occupies a range of integers whose size is
-  // decided based on the hotness of the key-range. When a random value is
-  // generated based on uniform distribution, we map it to the KeyrangeUnit Vec
-  // and one KeyrangeUnit is selected. The probability of a  KeyrangeUnit being
-  // selected is the same as the hotness of this KeyrangeUnit. After that, the
-  // key can be randomly allocated to the key-range of this KeyrangeUnit, or we
-  // can based on the power distribution (y=ax^b) to generate the offset of
-  // the key in the selected key-range. In this way, we generate the keyID
-  // based on the hotness of the prefix and also the key hotness distribution.
+  // KeyrangeUnit, each KeyrangeUnit occupies a range of integers whose size
+  // is decided based on the hotness of the key-range. When a random value is
+  // generated based on uniform distribution, we map it to the KeyrangeUnit
+  // Vec and one KeyrangeUnit is selected. The probability of a  KeyrangeUnit
+  // being selected is the same as the hotness of this KeyrangeUnit. After
+  // that, the key can be randomly allocated to the key-range of this
+  // KeyrangeUnit, or we can based on the power distribution (y=ax^b) to
+  // generate the offset of the key in the selected key-range. In this way, we
+  // generate the keyID based on the hotness of the prefix and also the key
+  // hotness distribution.
   class GenerateTwoTermExpKeys {
    public:
     int64_t keyrange_rand_max_;
@@ -5867,7 +5939,8 @@ class Benchmark {
       return Status::OK();
     }
 
-    // Generate the Key ID according to the input ini_rand and key distribution
+    // Generate the Key ID according to the input ini_rand and key
+    // distribution
     int64_t DistGetKeyID(int64_t ini_rand, double key_dist_a,
                          double key_dist_b) {
       int64_t keyrange_rand = ini_rand % keyrange_rand_max_;
@@ -6914,8 +6987,8 @@ class Benchmark {
 
   // Read and merge random keys. The amount of reads and merges are controlled
   // by adjusting FLAGS_num and FLAGS_mergereadpercent. The number of distinct
-  // keys (and thus also the number of reads and merges on the same key) can be
-  // adjusted with FLAGS_merge_keys.
+  // keys (and thus also the number of reads and merges on the same key) can
+  // be adjusted with FLAGS_merge_keys.
   //
   // As with MergeRandom, the merge operator to use should be defined by
   // FLAGS_merge_operator.
@@ -7107,8 +7180,8 @@ class Benchmark {
   // parameter
   // will run the same benchmark without transactions.
   //
-  // RandomTransactionVerify() will then validate the correctness of the results
-  // by checking if the sum of all keys in each set is the same.
+  // RandomTransactionVerify() will then validate the correctness of the
+  // results by checking if the sum of all keys in each set is the same.
   void RandomTransaction(ThreadState* thread) {
     ReadOptions options(FLAGS_verify_checksum, true);
     Duration duration(FLAGS_duration, readwrites_);
@@ -7632,8 +7705,9 @@ int db_bench_tool(int argc, char** argv) {
   FLAGS_env->SetBackgroundThreads(FLAGS_num_low_pri_threads,
                                   ROCKSDB_NAMESPACE::Env::Priority::LOW);
 
-  // changed by jinghuan, since we can provide db_path vector instead of db only
-  // Choose a location for the test database if none given with --db=<path>
+  // changed by jinghuan, since we can provide db_path vector instead of db
+  // only Choose a location for the test database if none given with
+  // --db=<path>
   if (FLAGS_db.empty() && FLAGS_db_path.empty()) {
     std::string default_db_path;
     FLAGS_env->GetTestDirectory(&default_db_path);
