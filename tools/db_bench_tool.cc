@@ -4692,6 +4692,7 @@ class Benchmark {
         }
         const std::string key = workload->BuildKeyName();
         Slice val = gen.Generate();
+        std::cout << val.size() << std::endl;
         batch.Put(key, val);
 
         int64_t batch_bytes = 0;
@@ -4719,7 +4720,6 @@ class Benchmark {
       int blind_updates = 0;
       rocksdb::ReadOptions r_op;
       rocksdb::WriteOptions w_op;
-      Slice val;
 
       while (!duration.Done(1)) {
         if (duration.GetStage() != stage) {
@@ -4747,13 +4747,14 @@ class Benchmark {
             thread->stats.FinishedOps(nullptr, db, entries_per_batch_, kRead);
           } break;
           case ycsbc::UPDATE: {
-            val = gen.Generate();
+
+            Slice val = gen.Generate();
             // In rocksdb, update is just another put operation.
             op_status = db_.db->Put(w_op, key, val);
             thread->stats.FinishedOps(nullptr, db, entries_per_batch_, kUpdate);
           } break;
           case ycsbc::INSERT: {
-            val = gen.Generate();
+            Slice val = gen.Generate();
             // In rocksdb, update is just another put operation.
             op_status = db_.db->Put(w_op, key, val);
             thread->stats.FinishedOps(nullptr, db, entries_per_batch_, kWrite);
@@ -4775,7 +4776,7 @@ class Benchmark {
             if (op_status.IsNotFound()) {
               blind_updates++;
             }
-            val = gen.Generate();
+            Slice val = gen.Generate();
             op_status = db_.db->Put(w_op, key, val);
             thread->stats.FinishedOps(nullptr, db, entries_per_batch_, kUpdate);
           } break;
