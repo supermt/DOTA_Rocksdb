@@ -3002,9 +3002,13 @@ class Benchmark {
     std::stringstream benchmark_stream(FLAGS_benchmarks);
     std::string name;
     std::unique_ptr<ExpiredTimeFilter> filter;
+    std::string prefix_report_name = FLAGS_report_file;
+    int workload_num = 0;
     while (std::getline(benchmark_stream, name, ',')) {
       // Sanitize parameters
       num_ = FLAGS_num;
+      FLAGS_report_file = prefix_report_name + "_" + ToString(workload_num);
+      workload_num++;
       reads_ = (FLAGS_reads < 0 ? FLAGS_num : FLAGS_reads);
       writes_ = (FLAGS_writes < 0 ? FLAGS_num : FLAGS_writes);
       deletes_ = (FLAGS_deletes < 0 ? FLAGS_num : FLAGS_deletes);
@@ -4522,11 +4526,7 @@ class Benchmark {
   }
 
   void WriteSeq(ThreadState* thread) { DoWrite(thread, SEQUENTIAL); }
-  void YCSBLoader(ThreadState* thread) {
-    std::cout << "YCSB workload : " << FLAGS_ycsb_workload << std::endl;
-    FLAGS_num = FLAGS_load_num + FLAGS_running_num;
-    ycsbc::CoreWorkload wl;
-    ycsbc::utils::Properties props;
+  void InitWorkload(ycsbc::CoreWorkload& wl, ycsbc::utils::Properties& props) {
     if (!FLAGS_ycsb_workload.empty()) {
       std::ifstream input(FLAGS_ycsb_workload);
       props.Load(input);
@@ -4534,39 +4534,33 @@ class Benchmark {
     if (props.GetProperty(ycsbc::CoreWorkload::RECORD_COUNT_PROPERTY).empty()) {
       props.SetProperty(ycsbc::CoreWorkload::RECORD_COUNT_PROPERTY,
                         std::to_string(FLAGS_load_num));
+    } else {
+      FLAGS_load_num = std::stoi(
+          props.GetProperty(ycsbc::CoreWorkload::RECORD_COUNT_PROPERTY));
     }
     if (props.GetProperty(ycsbc::CoreWorkload::OPERATION_COUNT_PROPERTY)
             .empty()) {
       props.SetProperty(ycsbc::CoreWorkload::OPERATION_COUNT_PROPERTY,
                         std::to_string(FLAGS_load_num));
+    } else {
+      FLAGS_running_num = std::stoi(
+          props.GetProperty(ycsbc::CoreWorkload::OPERATION_COUNT_PROPERTY));
     }
     wl.Init(props);
-
+  }
+  void YCSBLoader(ThreadState* thread) {
+    ycsbc::CoreWorkload wl;
+    ycsbc::utils::Properties props;
+    InitWorkload(wl, props);
     YCSBWorking(thread, &wl, true, false);
     if (FLAGS_print_stall_influence) {
       PrintOutStallInfluenceData();
     }
   }
   void YCSBRunner(ThreadState* thread) {
-    std::cout << "YCSB workload : " << FLAGS_ycsb_workload << std::endl;
-    FLAGS_num = FLAGS_load_num + FLAGS_running_num;
     ycsbc::CoreWorkload wl;
     ycsbc::utils::Properties props;
-    if (!FLAGS_ycsb_workload.empty()) {
-      std::ifstream input(FLAGS_ycsb_workload);
-      props.Load(input);
-    }
-    if (props.GetProperty(ycsbc::CoreWorkload::RECORD_COUNT_PROPERTY).empty()) {
-      props.SetProperty(ycsbc::CoreWorkload::RECORD_COUNT_PROPERTY,
-                        std::to_string(FLAGS_load_num));
-    }
-    if (props.GetProperty(ycsbc::CoreWorkload::OPERATION_COUNT_PROPERTY)
-            .empty()) {
-      props.SetProperty(ycsbc::CoreWorkload::OPERATION_COUNT_PROPERTY,
-                        std::to_string(FLAGS_load_num));
-    }
-    wl.Init(props);
-
+    InitWorkload(wl, props);
     YCSBWorking(thread, &wl, false, true);
     if (FLAGS_print_stall_influence) {
       PrintOutStallInfluenceData();
@@ -4574,25 +4568,9 @@ class Benchmark {
   }
 
   void YCSBIntegrate(ThreadState* thread) {
-    std::cout << "YCSB workload : " << FLAGS_ycsb_workload << std::endl;
-    FLAGS_num = FLAGS_load_num + FLAGS_running_num;
     ycsbc::CoreWorkload wl;
     ycsbc::utils::Properties props;
-    if (!FLAGS_ycsb_workload.empty()) {
-      std::ifstream input(FLAGS_ycsb_workload);
-      props.Load(input);
-    }
-    if (props.GetProperty(ycsbc::CoreWorkload::RECORD_COUNT_PROPERTY).empty()) {
-      props.SetProperty(ycsbc::CoreWorkload::RECORD_COUNT_PROPERTY,
-                        std::to_string(FLAGS_load_num));
-    }
-    if (props.GetProperty(ycsbc::CoreWorkload::OPERATION_COUNT_PROPERTY)
-            .empty()) {
-      props.SetProperty(ycsbc::CoreWorkload::OPERATION_COUNT_PROPERTY,
-                        std::to_string(FLAGS_load_num));
-    }
-    wl.Init(props);
-
+    InitWorkload(wl, props);
     YCSBWorking(thread, &wl, true, true);
     if (FLAGS_print_stall_influence) {
       PrintOutStallInfluenceData();
