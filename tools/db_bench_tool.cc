@@ -4692,7 +4692,6 @@ class Benchmark {
         }
         const std::string key = workload->BuildKeyName();
         Slice val = gen.Generate();
-        std::cout << val.size() << std::endl;
         batch.Put(key, val);
 
         int64_t batch_bytes = 0;
@@ -4747,7 +4746,6 @@ class Benchmark {
             thread->stats.FinishedOps(nullptr, db, entries_per_batch_, kRead);
           } break;
           case ycsbc::UPDATE: {
-
             Slice val = gen.Generate();
             // In rocksdb, update is just another put operation.
             op_status = db_.db->Put(w_op, key, val);
