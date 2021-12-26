@@ -106,26 +106,26 @@ else ()
             list(APPEND THIRDPARTY_LIBS JeMalloc::JeMalloc)
         endif ()
     endif ()
-    if(WITH_GFLAGS)
+    if (WITH_GFLAGS)
         # Config with namespace available since gflags 2.2.2
         option(GFLAGS_USE_TARGET_NAMESPACE "Use gflags import target with namespace." ON)
         find_package(gflags CONFIG)
-        if(gflags_FOUND)
-            if(TARGET ${GFLAGS_TARGET})
+        if (gflags_FOUND)
+            if (TARGET ${GFLAGS_TARGET})
                 # Config with GFLAGS_TARGET available since gflags 2.2.0
                 set(GFLAGS_LIB ${GFLAGS_TARGET})
-            else()
+            else ()
                 # Config with GFLAGS_LIBRARIES available since gflags 2.1.0
                 set(GFLAGS_LIB ${gflags_LIBRARIES})
-            endif()
-        else()
+            endif ()
+        else ()
             find_package(gflags REQUIRED)
             set(GFLAGS_LIB gflags::gflags)
-        endif()
+        endif ()
         include_directories(${GFLAGS_INCLUDE_DIR})
         list(APPEND THIRDPARTY_LIBS ${GFLAGS_LIB})
         add_definitions(-DGFLAGS=1)
-    endif()
+    endif ()
 
     if (WITH_SNAPPY)
         find_package(Snappy CONFIG)
@@ -715,6 +715,12 @@ set(SOURCES
         tools/trace_analyzer_tool.cc
         trace_replay/trace_replay.cc
         trace_replay/block_cache_tracer.cc
+        ycsbcore/acknowledged_counter_generator.cc
+        ycsbcore/basic_db.cc
+        ycsbcore/core_workload.cc
+        ycsbcore/db_factory.cc
+        ycsbcore/measurements.cc
+        ycsbcore/ycsbc.cc
         util/coding.cc
         util/compaction_job_stats_impl.cc
         util/comparator.cc

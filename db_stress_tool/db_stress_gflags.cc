@@ -75,7 +75,7 @@ DEFINE_bool(test_batches_snapshots, false,
             " MultiGet() by checking various values in a batch. Benefit of"
             " this mode:\n"
             "\t(a) No need to acquire mutexes during writes (less cache "
-            "flushes in multi-core leading to speed up)\n"
+            "flushes in multi-ycsbcore leading to speed up)\n"
             "\t(b) No long validation at the end (more speed up)\n"
             "\t(c) Test snapshot and atomicity of batch writes");
 

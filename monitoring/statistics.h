@@ -76,7 +76,7 @@ class StatisticsImpl : public Statistics {
   mutable port::Mutex aggregate_lock_;
 
   // The ticker/histogram data are stored in this structure, which we will store
-  // per-core. It is cache-aligned, so tickers/histograms belonging to different
+  // per-ycsbcore. It is cache-aligned, so tickers/histograms belonging to different
   // cores can never share the same cache line.
   //
   // Alignment attributes expand to nothing depending on the platform

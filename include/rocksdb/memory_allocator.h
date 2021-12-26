@@ -54,16 +54,16 @@ struct JemallocAllocatorOptions {
 };
 
 // Generate memory allocators which allocates through Jemalloc and utilize
-// MADV_DONTDUMP through madvice to exclude cache items from core dump.
+// MADV_DONTDUMP through madvice to exclude cache items from ycsbcore dump.
 // Applications can use the allocator with block cache to exclude block cache
-// usage from core dump.
+// usage from ycsbcore dump.
 //
 // Implementation details:
 // The JemallocNodumpAllocator creates a delicated jemalloc arena, and all
 // allocations of the JemallocNodumpAllocator is through the same arena.
 // The memory allocator hooks memory allocation of the arena, and call
 // madvice() with MADV_DONTDUMP flag to exclude the piece of memory from
-// core dump. Side benefit of using single arena would be reduce of jemalloc
+// ycsbcore dump. Side benefit of using single arena would be reduce of jemalloc
 // metadata for some workload.
 //
 // To mitigate mutex contention for using one single arena, jemalloc tcache

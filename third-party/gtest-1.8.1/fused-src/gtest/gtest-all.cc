@@ -6234,7 +6234,7 @@ int UnitTest::Run() {
     if (!GTEST_FLAG(break_on_failure))
       _set_abort_behavior(
           0x0,                                    // Clear the following flags:
-          _WRITE_ABORT_MSG | _CALL_REPORTFAULT);  // pop-up window, core dump.
+          _WRITE_ABORT_MSG | _CALL_REPORTFAULT);  // pop-up window, ycsbcore dump.
 # endif
   }
 #endif  // GTEST_OS_WINDOWS
@@ -7666,7 +7666,7 @@ static std::string ExitSummary(int exit_code) {
   }
 #  ifdef WCOREDUMP
   if (WCOREDUMP(exit_code)) {
-    m << " (core dumped)";
+    m << " (ycsbcore dumped)";
   }
 #  endif
 # endif  // GTEST_OS_WINDOWS || GTEST_OS_FUCHSIA

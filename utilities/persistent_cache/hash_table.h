@@ -23,8 +23,8 @@ namespace ROCKSDB_NAMESPACE {
 // HashTable<T, Hash, Equal>
 //
 // Traditional implementation of hash table with synchronization built on top
-// don't perform very well in multi-core scenarios. This is an implementation
-// designed for multi-core scenarios with high lock contention.
+// don't perform very well in multi-ycsbcore scenarios. This is an implementation
+// designed for multi-ycsbcore scenarios with high lock contention.
 //
 //                         |<-------- alpha ------------->|
 //               Buckets   Collision list

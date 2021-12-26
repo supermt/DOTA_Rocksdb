@@ -19,7 +19,7 @@ __thread size_t ConcurrentArena::tls_cpuid = 0;
 #endif
 
 namespace {
-// If the shard block size is too large, in the worst case, every core
+// If the shard block size is too large, in the worst case, every ycsbcore
 // allocates a block without populate it. If the shared block size is
 // 1MB, 64 cores will quickly allocate 64MB, and may quickly trigger a
 // flush. Cap the size instead.

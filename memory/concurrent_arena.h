@@ -32,16 +32,16 @@ namespace ROCKSDB_NAMESPACE {
 class Logger;
 
 // ConcurrentArena wraps an Arena.  It makes it thread safe using a fast
-// inlined spinlock, and adds small per-core allocation caches to avoid
+// inlined spinlock, and adds small per-ycsbcore allocation caches to avoid
 // contention for small allocations.  To avoid any memory waste from the
-// per-core shards, they are kept small, they are lazily instantiated
+// per-ycsbcore shards, they are kept small, they are lazily instantiated
 // only if ConcurrentArena actually notices concurrent use, and they
 // adjust their size so that there is no fragmentation waste when the
 // shard blocks are allocated from the underlying main arena.
 class ConcurrentArena : public Allocator {
  public:
   // block_size and huge_page_size are the same as for Arena (and are
-  // in fact just passed to the constructor of arena_.  The core-local
+  // in fact just passed to the constructor of arena_.  The ycsbcore-local
   // shards compute their shard_block_size as a fraction of block_size
   // that varies according to the hardware concurrency level.
   explicit ConcurrentArena(size_t block_size = Arena::kMinBlockSize,

@@ -969,8 +969,8 @@ prioritize_long_running_tests =						\
 
 # "make check" uses
 # Run with "make J=1 check" to disable parallelism in "make check".
-# Run with "make J=200% check" to run two parallel jobs per core.
-# The default is to run one job per core (J=100%).
+# Run with "make J=200% check" to run two parallel jobs per ycsbcore.
+# The default is to run one job per ycsbcore (J=100%).
 # See "man parallel" for its "-j ..." option.
 J ?= 100%
 

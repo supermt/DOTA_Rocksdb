@@ -106,7 +106,7 @@ uint8_t WriteThread::AwaitState(Writer* w, uint8_t goal_mask,
   // (portability code and CPU) to just look for yield calls that take
   // longer than we expect.  sched_yield() doesn't actually result in any
   // context switch overhead if there are no other runnable processes
-  // on the current core, in which case it usually takes less than
+  // on the current ycsbcore, in which case it usually takes less than
   // a microsecond.
   //
   // There are two primary tunables here: the threshold between "short"

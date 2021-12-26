@@ -80,7 +80,13 @@
 #include "utilities/merge_operators/bytesxor.h"
 #include "utilities/merge_operators/sortlist.h"
 #include "utilities/persistent_cache/block_cache_tier.h"
-
+#include "ycsbcore/client.h"
+#include "ycsbcore/core_workload.h"
+#include "ycsbcore/countdown_latch.h"
+#include "ycsbcore/db_factory.h"
+#include "ycsbcore/measurements.h"
+#include "ycsbcore/timer.h"
+#include "ycsbcore/utils.h"
 #ifdef MEMKIND
 #include "memory/memkind_kmem_allocator.h"
 #endif
@@ -99,6 +105,7 @@ DEFINE_string(
     "fillseqdeterministic,"
     "fillsync,"
     "fillrandom,"
+    "ycsb,"
     "filluniquerandomdeterministic,"
     "overwrite,"
     "readrandom,"
@@ -624,6 +631,9 @@ DEFINE_string(change_points, "",
 
 // auto-tuner related options
 
+DEFINE_string(ycsb_workload, "ycsb_workload/workloada", "The workload of YCSB");
+DEFINE_int64(load_num, 100000, "Num of operations in loading phrase");
+DEFINE_int64(running_num, 100000, "Num of operations in running phrase");
 DEFINE_bool(DOTA_enabled, false, "Whether trigger the DOTA framework");
 DEFINE_bool(Funnel_enable, false, "Use Funnel shape model");
 DEFINE_int64(DOTA_tuning_gap, 0, "Tuning gap of the DOTA agent, in secs ");
@@ -1094,7 +1104,7 @@ DEFINE_uint64(
 
 DEFINE_uint64(write_thread_slow_yield_usec, 3,
               "The threshold at which a slow yield is considered a signal that "
-              "other processes or threads want the core.");
+              "other processes or threads want the ycsbcore.");
 
 DEFINE_int32(rate_limit_delay_max_milliseconds, 1000,
              "When hard_rate_limit is set then this is the max time a put will"
@@ -3016,6 +3026,7 @@ class Benchmark {
       void (Benchmark::*post_process_method)() = nullptr;
 
       bool fresh_db = false;
+      char ycsb_workload = 'a';
       int num_threads = FLAGS_threads;
 
       int num_repeat = 1;
@@ -3081,6 +3092,9 @@ class Benchmark {
       } else if (name == "fillrandom") {
         fresh_db = true;
         method = &Benchmark::WriteRandom;
+      } else if (name == "ycsb") {
+        fresh_db = true;
+        method = &Benchmark::YCSBRunner;
       } else if (name == "filluniquerandom") {
         fresh_db = true;
         if (num_threads > 1) {
@@ -4504,6 +4518,23 @@ class Benchmark {
 
   void WriteSeq(ThreadState* thread) { DoWrite(thread, SEQUENTIAL); }
 
+  void YCSBRunner(ThreadState* thread) {
+    std::cout << "YCSB workload : " << FLAGS_ycsb_workload << std::endl;
+    FLAGS_num = FLAGS_load_num + FLAGS_running_num;
+    ycsbc::CoreWorkload wl;
+    ycsbc::utils::Properties props;
+    props.SetProperty(ycsbc::CoreWorkload::RECORD_COUNT_PROPERTY,
+                      std::to_string(FLAGS_load_num));
+    props.SetProperty(ycsbc::CoreWorkload::OPERATION_COUNT_PROPERTY,
+                      std::to_string(FLAGS_running_num));
+    wl.Init(props);
+
+    YCSBWorking(thread, &wl);
+    if (FLAGS_print_stall_influence) {
+      PrintOutStallInfluenceData();
+    }
+  }
+
   void WriteRandom(ThreadState* thread) {
     DoWrite(thread, RANDOM);
     if (FLAGS_print_stall_influence) {
@@ -4588,6 +4619,130 @@ class Benchmark {
     return FLAGS_sine_a * sin((FLAGS_sine_b * x) + FLAGS_sine_c) + FLAGS_sine_d;
   }
 
+  void YCSBWorking(ThreadState* thread, ycsbc::CoreWorkload* workload) {
+    int remain_loading = FLAGS_load_num;
+    int remain_running = FLAGS_running_num;
+    const int test_duration = FLAGS_duration;
+    int64_t ops_per_stage = 1;
+
+    // load first, then run
+    Duration loading_duration(test_duration, remain_loading, ops_per_stage);
+    Duration running_duration(test_duration, remain_running, ops_per_stage);
+    int stage = 0;
+    WriteBatch batch;
+    Status s;
+    RandomGenerator gen;
+    int64_t bytes = 0;
+
+    Duration duration = loading_duration;
+    while (!duration.Done(entries_per_batch_)) {
+      DB* db = SelectDB(thread);
+      if (duration.GetStage() != stage) {
+        stage = duration.GetStage();
+        if (db_.db != nullptr) {
+          db_.CreateNewCf(open_options_, stage);
+        } else {
+          for (auto& input_db : multi_dbs_) {
+            input_db.CreateNewCf(open_options_, stage);
+          }
+        }
+      }
+      const std::string key = workload->BuildKeyName();
+      Slice val = gen.Generate();
+      batch.Put(key, val);
+
+      int64_t batch_bytes = 0;
+      for (int64_t j = 0; j < entries_per_batch_; j++) {
+        batch_bytes += val.size() + key.size();
+        bytes += val.size() + key.size();
+      }
+      if (thread->shared->write_rate_limiter.get() != nullptr) {
+        thread->shared->write_rate_limiter->Request(
+            batch_bytes, Env::IO_HIGH, nullptr /* stats */,
+            RateLimiter::OpType::kWrite);
+        thread->stats.ResetLastOpTime();
+      }
+      thread->stats.FinishedOps(nullptr, db, entries_per_batch_, kWrite);
+    }
+    thread->stats.AddBytes(bytes);
+    duration = running_duration;
+
+    Status op_status;
+    int read_count = 0;
+    int found_count = 0;
+    int blind_updates = 0;
+    rocksdb::ReadOptions r_op;
+    rocksdb::WriteOptions w_op;
+    Slice val;
+
+    while (!duration.Done(1)) {
+      if (duration.GetStage() != stage) {
+        stage = duration.GetStage();
+        if (db_.db != nullptr) {
+          db_.CreateNewCf(open_options_, stage);
+        } else {
+          for (auto& db : multi_dbs_) {
+            db.CreateNewCf(open_options_, stage);
+          }
+        }
+      }
+      std::string data;
+      uint64_t key_num = workload->NextTransactionKeyNum();
+      const std::string key = workload->BuildKeyName(key_num);
+      DB* db = SelectDB(thread);
+      switch (workload->NextOp()) {
+        case ycsbc::READ: {
+          op_status = db_.db->Get(r_op, key, &data);
+          if (op_status.ok()) {
+            found_count++;
+            bytes += key.size() + data.size();
+          }
+          read_count++;
+          thread->stats.FinishedOps(nullptr, db, entries_per_batch_, kRead);
+        } break;
+        case ycsbc::UPDATE: {
+          val = gen.Generate();
+          // In rocksdb, update is just another put operation.
+          op_status = db_.db->Put(w_op, key, val);
+          thread->stats.FinishedOps(nullptr, db, entries_per_batch_, kUpdate);
+        } break;
+        case ycsbc::INSERT: {
+          val = gen.Generate();
+          // In rocksdb, update is just another put operation.
+          op_status = db_.db->Put(w_op, key, val);
+          thread->stats.FinishedOps(nullptr, db, entries_per_batch_, kWrite);
+        } break;
+        case ycsbc::SCAN: {
+          Iterator* db_iter = db_.db->NewIterator(rocksdb::ReadOptions());
+          db_iter->Seek(key);
+          int len = workload->scan_len_chooser_->Next();
+          for (int i = 0; db_iter->Valid() && i < len; i++) {
+            data = db_iter->value().ToString();
+            db_iter->Next();
+          }
+          thread->stats.FinishedOps(nullptr, db, entries_per_batch_, kSeek);
+          delete db_iter;
+        } break;
+        case ycsbc::READMODIFYWRITE: {
+          op_status = db_.db->Get(r_op, key, &data);
+          read_count++;
+          if (op_status.IsNotFound()) {
+            blind_updates++;
+          }
+          val = gen.Generate();
+          op_status = db_.db->Put(w_op, key, val);
+          thread->stats.FinishedOps(nullptr, db, entries_per_batch_, kUpdate);
+        } break;
+        case ycsbc::DELETE: {
+          op_status = db_.db->Delete(w_op, key);
+          thread->stats.FinishedOps(nullptr, db, entries_per_batch_, kDelete);
+        } break;
+        case ycsbc::MAXOPTYPE:
+          throw ycsbc::utils::Exception("Operation request is not recognized!");
+      }
+    }
+    thread->stats.AddBytes(bytes);
+  }
   void DoWrite(ThreadState* thread, WriteMode write_mode) {
     const int test_duration = write_mode == RANDOM ? FLAGS_duration : 0;
     const int64_t num_ops = writes_ == 0 ? num_ : writes_;

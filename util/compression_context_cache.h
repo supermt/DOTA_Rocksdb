@@ -10,7 +10,7 @@
 // Compression context cache allows to cache compression/uncompression contexts
 // This helps with Random Read latencies and reduces CPU utilization
 // Caching is implemented using CoreLocal facility. Compression/Uncompression
-// instances are cached on a per core basis using CoreLocalArray. A borrowed
+// instances are cached on a per ycsbcore basis using CoreLocalArray. A borrowed
 // instance is atomically replaced with a sentinel value for the time of being
 // used. If it turns out that another thread is already makes use of the
 // instance we still create one on the heap which is later is destroyed.

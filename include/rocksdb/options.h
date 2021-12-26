@@ -992,7 +992,7 @@ struct DBOptions {
 
   // The latency in microseconds after which a std::this_thread::yield
   // call (sched_yield on Linux) is considered to be a signal that
-  // other processes or threads would like to use the current core.
+  // other processes or threads would like to use the current ycsbcore.
   // Increasing this makes writer threads more likely to take CPU
   // by spinning, which will show up as an increase in the number of
   // involuntary context switches.

@@ -49,7 +49,7 @@ spin_result spin_pause_until(
 
     //  The pause instruction is the polite way to spin, but it doesn't
     //  actually affect correctness to omit it if we don't have it. Pausing
-    //  donates the full capabilities of the current core to its other
+    //  donates the full capabilities of the current ycsbcore to its other
     //  hyperthreads for a dozen cycles or so.
     asm_volatile_pause();
   }

@@ -257,7 +257,7 @@ class Waiter {
   // waiting state to avoid risk of a load racing with a write.  However, it
   // helps to make this atomic because we can use an unconditional load and make
   // full use of the load buffer to coalesce both reads into a single clock
-  // cycle after the line arrives in the combiner core.  This is a heavily
+  // cycle after the line arrives in the combiner ycsbcore.  This is a heavily
   // contended line, so an RFO from the enqueueing thread is highly likely and
   // has the potential to cause an immediate invalidation; blocking the combiner
   // thread from making progress until the line is pulled back to read this
@@ -309,7 +309,7 @@ class Waiter {
     //
     // The waker thread needs to synchronize on this cacheline to issue a
     // wakeup to the waiter, meaning that the entire line needs to be pulled
-    // into the remote core in exclusive mode.  So we reuse the coherence
+    // into the remote ycsbcore in exclusive mode.  So we reuse the coherence
     // operation to transfer the return value in addition to the
     // synchronization signal.  In the case that the user's data item is
     // small, the data is transferred all inline as part of the same line,
@@ -856,9 +856,9 @@ std::uint64_t publish(
   // time publishing has some overhead because it executes an atomic exchange on
   // the futex word.  If this line is in a remote thread (eg.  the combiner),
   // then each time we publish a timestamp, this thread has to submit an RFO to
-  // the remote core for the cacheline, blocking progress for both threads.
+  // the remote ycsbcore for the cacheline, blocking progress for both threads.
   //
-  // the remote core uses a store in the fast path - why then does an RFO make a
+  // the remote ycsbcore uses a store in the fast path - why then does an RFO make a
   // difference?  The only educated guess we have here is that the added
   // roundtrip delays draining of the store buffer, which essentially exerts
   // backpressure on future stores, preventing parallelization
@@ -1116,7 +1116,7 @@ DistributedMutex<Atomic, TimePublishing>::try_lock() {
   // The lock attempt below requires an expensive atomic fetch-and-mutate or
   // an even more expensive atomic compare-and-swap loop depending on the
   // platform.  These operations require pulling the lock cacheline into the
-  // current core in exclusive mode and are therefore hard to parallelize
+  // current ycsbcore in exclusive mode and are therefore hard to parallelize
   //
   // This probabilistically avoids the expense by first checking whether the
   // mutex is currently locked

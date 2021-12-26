@@ -112,7 +112,7 @@ class Directories {
 };
 
 // While DB is the public interface of RocksDB, and DBImpl is the actual
-// class implementing it. It's the entrance of the core RocksdB engine.
+// class implementing it. It's the entrance of the ycsbcore RocksdB engine.
 // All other DB implementations, e.g. TransactionDB, BlobDB, etc, wrap a
 // DBImpl internally.
 // Other than functions implementing the DB interface, some public

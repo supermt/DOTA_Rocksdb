@@ -143,7 +143,7 @@ static void StackTraceHandler(int sig) {
   fprintf(stderr, "Received signal %d (%s)\n", sig, strsignal(sig));
   // skip the top three signal handler related frames
   PrintStack(3);
-  // re-signal to default handler (so we still get core dump if needed...)
+  // re-signal to default handler (so we still get ycsbcore dump if needed...)
   raise(sig);
 }
 

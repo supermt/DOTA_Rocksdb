@@ -16,7 +16,7 @@
 
 namespace ROCKSDB_NAMESPACE {
 
-// An array of core-local values. Ideally the value type, T, is cache aligned to
+// An array of ycsbcore-local values. Ideally the value type, T, is cache aligned to
 // prevent false sharing.
 template <typename T>
 class CoreLocalArray {
@@ -24,15 +24,15 @@ class CoreLocalArray {
   CoreLocalArray();
 
   size_t Size() const;
-  // returns pointer to the element corresponding to the core that the thread
+  // returns pointer to the element corresponding to the ycsbcore that the thread
   // currently runs on.
   T* Access() const;
-  // same as above, but also returns the core index, which the client can cache
-  // to reduce how often core ID needs to be retrieved. Only do this if some
-  // inaccuracy is tolerable, as the thread may migrate to a different core.
+  // same as above, but also returns the ycsbcore index, which the client can cache
+  // to reduce how often ycsbcore ID needs to be retrieved. Only do this if some
+  // inaccuracy is tolerable, as the thread may migrate to a different ycsbcore.
   std::pair<T*, size_t> AccessElementAndIndex() const;
-  // returns pointer to element for the specified core index. This can be used,
-  // e.g., for aggregation, or if the client caches core index.
+  // returns pointer to element for the specified ycsbcore index. This can be used,
+  // e.g., for aggregation, or if the client caches ycsbcore index.
   T* AccessAtCore(size_t core_idx) const;
 
  private:

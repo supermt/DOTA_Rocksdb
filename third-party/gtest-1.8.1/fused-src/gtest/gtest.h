@@ -244,7 +244,7 @@
 //   GTEST_OS_ZOS      - z/OS
 //
 // Among the platforms, Cygwin, Linux, Max OS X, and Windows have the
-// most stable support.  Since core members of the Google Test project
+// most stable support.  Since ycsbcore members of the Google Test project
 // don't have access to other platforms, support for them may be less
 // stable.  If you notice any problems on your platform, please notify
 // googletestframework@googlegroups.com (patches for fixing them are

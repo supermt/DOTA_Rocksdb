@@ -17,7 +17,7 @@ std::string kDBPath = "/tmp/rocksdb_compact_files_example";
 struct CompactionTask;
 
 // This is an example interface of external-compaction algorithm.
-// Compaction algorithm can be implemented outside the core-RocksDB
+// Compaction algorithm can be implemented outside the ycsbcore-RocksDB
 // code by using the pluggable compaction APIs that RocksDb provides.
 class Compactor : public EventListener {
  public:
