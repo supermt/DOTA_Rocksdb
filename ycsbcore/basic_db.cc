@@ -7,6 +7,7 @@
 //
 
 #include "basic_db.h"
+
 #include "db_factory.h"
 
 using std::cout;
@@ -14,14 +15,13 @@ using std::endl;
 
 namespace ycsbc {
 
-std::mutex BasicDB:: mutex_;
+std::mutex BasicDB::mutex_;
 
-void BasicDB::Init() {
-  std::lock_guard<std::mutex> lock(mutex_);
-}
+void BasicDB::Init() { std::lock_guard<std::mutex> lock(mutex_); }
 
 DB::Status BasicDB::Read(const std::string &table, const std::string &key,
-                         const std::vector<std::string> *fields, std::vector<Field> &result) {
+                         const std::vector<std::string> *fields,
+                         std::vector<Field> &result) {
   std::lock_guard<std::mutex> lock(mutex_);
   cout << "READ " << table << ' ' << key;
   if (fields) {
@@ -31,13 +31,14 @@ DB::Status BasicDB::Read(const std::string &table, const std::string &key,
     }
     cout << ']' << endl;
   } else {
-    cout  << " < all fields >" << endl;
+    cout << " < all fields >" << endl;
   }
+  if (result.empty()) return kNotFound;
   return kOK;
 }
 
-DB::Status BasicDB::Scan(const std::string &table, const std::string &key, int len,
-                         const std::vector<std::string> *fields,
+DB::Status BasicDB::Scan(const std::string &table, const std::string &key,
+                         int len, const std::vector<std::string> *fields,
                          std::vector<std::vector<Field>> &result) {
   std::lock_guard<std::mutex> lock(mutex_);
   cout << "SCAN " << table << ' ' << key << " " << len;
@@ -48,8 +49,9 @@ DB::Status BasicDB::Scan(const std::string &table, const std::string &key, int l
     }
     cout << ']' << endl;
   } else {
-    cout  << " < all fields >" << endl;
+    cout << " < all fields >" << endl;
   }
+  if (result.empty()) return kNotFound;
   return kOK;
 }
 
@@ -81,10 +83,8 @@ DB::Status BasicDB::Delete(const std::string &table, const std::string &key) {
   return kOK;
 }
 
-DB *NewBasicDB() {
-  return new BasicDB;
-}
+DB *NewBasicDB() { return new BasicDB; }
 
 const bool registered = DBFactory::RegisterDB("basic", NewBasicDB);
 
-} // ycsbc
+}  // namespace ycsbc

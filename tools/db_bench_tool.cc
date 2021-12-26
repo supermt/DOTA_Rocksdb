@@ -3026,7 +3026,6 @@ class Benchmark {
       void (Benchmark::*post_process_method)() = nullptr;
 
       bool fresh_db = false;
-      char ycsb_workload = 'a';
       int num_threads = FLAGS_threads;
 
       int num_repeat = 1;
