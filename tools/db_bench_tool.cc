@@ -4672,44 +4672,50 @@ class Benchmark {
     Duration loading_duration(test_duration, remain_loading, ops_per_stage);
     Duration running_duration(test_duration, remain_running, ops_per_stage);
     int stage = 0;
-    WriteBatch batch;
+//    WriteBatch batch;
     Status s;
     RandomGenerator gen;
     int64_t bytes = 0;
     Duration duration = loading_duration;
-    if (load) {
-      while (!duration.Done(entries_per_batch_)) {
-        DB* db = SelectDB(thread);
-        if (duration.GetStage() != stage) {
-          stage = duration.GetStage();
-          if (db_.db != nullptr) {
-            db_.CreateNewCf(open_options_, stage);
-          } else {
-            for (auto& input_db : multi_dbs_) {
-              input_db.CreateNewCf(open_options_, stage);
+    rocksdb::ReadOptions r_op;
+    rocksdb::WriteOptions w_op;
+
+   try{
+        if (load) {
+          while (!duration.Done(entries_per_batch_)) {
+            DB* db = SelectDB(thread);
+            if (duration.GetStage() != stage) {
+              stage = duration.GetStage();
+              if (db_.db != nullptr) {
+                db_.CreateNewCf(open_options_, stage);
+              } else {
+                for (auto& input_db : multi_dbs_) {
+                  input_db.CreateNewCf(open_options_, stage);
+                }
+              }
             }
+            std::string key = workload->BuildKeyName();
+            Slice val = gen.Generate();
+            db_.db->Put(w_op, key, val);
+    
+            int64_t batch_bytes = 0;
+            for (int64_t j = 0; j < entries_per_batch_; j++) {
+              batch_bytes += val.size() + key.size();
+              bytes += val.size() + key.size();
+            }
+            if (thread->shared->write_rate_limiter.get() != nullptr) {
+              thread->shared->write_rate_limiter->Request(
+                  batch_bytes, Env::IO_HIGH, nullptr /* stats */,
+                  RateLimiter::OpType::kWrite);
+              thread->stats.ResetLastOpTime();
+            }
+            thread->stats.FinishedOps(nullptr, db, entries_per_batch_, kWrite);
           }
-        }
-        const std::string key = workload->BuildKeyName();
-        Slice val = gen.Generate();
-        batch.Put(key, val);
-
-        int64_t batch_bytes = 0;
-        for (int64_t j = 0; j < entries_per_batch_; j++) {
-          batch_bytes += val.size() + key.size();
-          bytes += val.size() + key.size();
-        }
-        if (thread->shared->write_rate_limiter.get() != nullptr) {
-          thread->shared->write_rate_limiter->Request(
-              batch_bytes, Env::IO_HIGH, nullptr /* stats */,
-              RateLimiter::OpType::kWrite);
-          thread->stats.ResetLastOpTime();
-        }
-        thread->stats.FinishedOps(nullptr, db, entries_per_batch_, kWrite);
-      }
-      thread->stats.AddBytes(bytes);
+          thread->stats.AddBytes(bytes);
+        }    
+    }catch (const std::bad_alloc& e){
+        std::cout << e.what() << std::endl; 
     }
-
     if (run) {
       duration = running_duration;
 
@@ -4717,9 +4723,6 @@ class Benchmark {
       int read_count = 0;
       int found_count = 0;
       int blind_updates = 0;
-      rocksdb::ReadOptions r_op;
-      rocksdb::WriteOptions w_op;
-
       while (!duration.Done(1)) {
         if (duration.GetStage() != stage) {
           stage = duration.GetStage();
