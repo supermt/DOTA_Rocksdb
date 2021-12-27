@@ -455,6 +455,7 @@ TuningOP FEAT_Tuner::TuneByTEA() {
   // Memtable size
   if (current_score_.memtable_speed <=
       MO_threshold * max_scores.memtable_speed) {
+    result.ThreadOp = kDouble;
     result.BatchOp = kDouble;
   }
 
