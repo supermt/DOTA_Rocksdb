@@ -1205,6 +1205,8 @@ struct Options : public DBOptions, public ColumnFamilyOptions {
   // Use this if your DB is very small (like under 1GB) and you don't want to
   // spend lots of memory for memtables.
   Options* OptimizeForSmallDb();
+  double TEA_k = 0.75;
+  double FEA_k = 0.75;
 };
 
 //

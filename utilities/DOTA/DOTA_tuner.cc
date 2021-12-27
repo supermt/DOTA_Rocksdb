@@ -12,7 +12,7 @@ DOTA_Tuner::~DOTA_Tuner() = default;
 void DOTA_Tuner::DetectTuningOperations(
     int secs_elapsed, std::vector<ChangePoint> *change_list_ptr) {
   current_sec = secs_elapsed;
-  UpdateSystemStats();
+  //  UpdateSystemStats();
   SystemScores current_score = ScoreTheSystem();
   UpdateMaxScore(current_score);
   scores.push_back(current_score);
@@ -73,11 +73,10 @@ BatchSizeStallLevels DOTA_Tuner::LocateBatchStates(SystemScores &score) {
 };
 
 SystemScores DOTA_Tuner::ScoreTheSystem() {
+  UpdateSystemStats();
   SystemScores current_score;
-  current_score.memtable_speed =
-      (this->total_ops_done_ptr_->load() - *last_report_ptr) / current_sec;
 
-  uint64_t total_mem_size = 1;
+  uint64_t total_mem_size = 0;
   uint64_t active_mem = 0;
   running_db_->GetIntProperty("rocksdb.size-all-mem-tables", &total_mem_size);
   running_db_->GetIntProperty("rocksdb.cur-size-active-mem-table", &active_mem);
@@ -86,7 +85,8 @@ SystemScores DOTA_Tuner::ScoreTheSystem() {
   current_score.immutable_number = cfd->imm()->NumNotFlushed();
 
   std::vector<FlushMetrics> flush_metric_list;
-  auto flush_result_length = flush_list_from_opt_ptr->size();
+  auto flush_result_length =
+      running_db_->immutable_db_options().flush_stats->size();
   auto compaction_result_length =
       running_db_->immutable_db_options().job_stats->size();
 
@@ -100,7 +100,20 @@ SystemScores DOTA_Tuner::ScoreTheSystem() {
     }
   }
   int l0_compaction = 0;
-  current_score.flush_numbers = flush_metric_list.size();
+
+  auto num_new_flushes = (flush_result_length - flush_list_accessed);
+  current_score.flush_numbers = num_new_flushes;
+  //  current_score.memtable_speed =
+  //      (this->total_ops_done_ptr_->load() - *last_report_ptr) / tuning_gap;
+  // using op to calculate the memtable speed is not logical
+  // we use the flushed job * memtable size + active memtable size to measure
+  // it.
+  current_score.memtable_speed =
+      (current_score.flush_numbers * current_opt.write_buffer_size +
+       total_mem_size - last_unflushed_bytes) /
+      tuning_gap;
+  current_score.memtable_speed /= kMicrosInSecond;  // we use MiB to calculate
+  last_unflushed_bytes = total_mem_size;
   //  std::cout << current_score.flush_numbers << std::endl;
   uint64_t max_pending_bytes = 0;
   for (uint64_t i = compaction_list_accessed; i < compaction_result_length;
@@ -115,18 +128,17 @@ SystemScores DOTA_Tuner::ScoreTheSystem() {
 
     current_score.disk_bandwidth += temp.total_bytes;
   }
-  auto new_flushes = (flush_result_length - flush_list_accessed);
 
   // flush_speed_avg,flush_speed_var,l0_drop_ratio
-  if (current_score.flush_speed_avg != 0) {
-    current_score.flush_speed_avg /= new_flushes;
+  if (num_new_flushes != 0) {
+    current_score.flush_speed_avg /= num_new_flushes;
 
     for (auto item : flush_metric_list) {
       current_score.flush_speed_var +=
           (item.write_out_bandwidth - current_score.flush_speed_avg) *
           (item.write_out_bandwidth - current_score.flush_speed_avg);
     }
-    current_score.flush_speed_var /= new_flushes;
+    current_score.flush_speed_var /= num_new_flushes;
   }
   if (l0_compaction != 0) {
     current_score.l0_drop_ratio /= l0_compaction;
@@ -230,7 +242,7 @@ TuningOP DOTA_Tuner::VoteForOP(SystemScores & /*current_score*/,
 }
 
 inline void DOTA_Tuner::SetThreadNum(std::vector<ChangePoint> *change_list,
-                                     uint64_t target_value) {
+                                     int target_value) {
   ChangePoint thread_num_cp;
   thread_num_cp.opt = max_bg_jobs;
   thread_num_cp.db_width = true;
@@ -290,7 +302,7 @@ void DOTA_Tuner::FillUpChangeList(std::vector<ChangePoint> *change_list,
   }
   switch (op.ThreadOp) {
     case kDouble:
-      SetThreadNum(change_list, current_thread_num *= 2);
+      SetThreadNum(change_list, current_thread_num *= double_ratio);
       break;
     case kLinearIncrease:
       SetThreadNum(change_list, current_thread_num += 2);
@@ -299,7 +311,7 @@ void DOTA_Tuner::FillUpChangeList(std::vector<ChangePoint> *change_list,
       SetThreadNum(change_list, current_thread_num -= 2);
       break;
     case kHalf:
-      SetThreadNum(change_list, current_thread_num /= 2);
+      SetThreadNum(change_list, current_thread_num /= double_ratio);
       break;
     case kKeep:
       break;
@@ -327,9 +339,130 @@ FEAT_Tuner::~FEAT_Tuner() = default;
 
 void FEAT_Tuner::DetectTuningOperations(int secs_elapsed,
                                         std::vector<ChangePoint> *change_list) {
-  std::cout << "Using the FEAT Tuner" << std::endl;
-  DOTA_Tuner::DetectTuningOperations(secs_elapsed, change_list);
-
+  //   first, we tune only when the flushing speed is slower than before
+  //  UpdateSystemStats();
+  auto current_score = this->ScoreTheSystem();
+  scores.push_back(current_score);
+  if (scores.size() == 1) {
+    return;
+  }
+  this->UpdateMaxScore(current_score);
+  normalize(current_score);
+  if (scores.size() >= DOTA_Tuner::score_array_len) {
+    // remove the first record
+    scores.pop_front();
+  }
+  // if the flushing speed is faster than the k of  former section, skip this
+  // round
+  //
+  if (current_score.flush_speed_avg >=
+          max_scores.flush_speed_avg * current_opt.TEA_k &&
+      current_score.memtable_speed >=
+          max_scores.memtable_speed * current_opt.TEA_k) {
+    // Flush speed can be 0 for there's no enough data.
+    return;
+  }
+  current_score_ = current_score;
+  TuningOP tea_result = TuneByTEA();
+  FillUpChangeList(change_list, tea_result);
+  if (FEA_enable) {
+    TuningOP fea_result = TuneByFEA();
+    FillUpChangeList(change_list, fea_result);
+  }
 }
+SystemScores FEAT_Tuner::normalize(SystemScores &origin_score) {
+  // the normlization of flushing speed.
+  std::cout << origin_score.flush_speed_avg << ","
+            << origin_score.memtable_speed << std::endl;
+  origin_score.flush_speed_avg /= origin_score.memtable_speed;
+  return origin_score;
+}
+TuningOP FEAT_Tuner::TuneByTEA() {
+  // the flushing speed is low.
+  TuningOP result{kKeep, kKeep};
+  switch (current_stage) {
+    case kSlowStart: {
+      result.ThreadOp = kDouble;
+      // if MO happens, stop the increment
+      if (current_score_.flush_speed_avg <=
+          bandwidth_congestion_threshold * max_scores.flush_speed_avg) {
+        // Flush is too slow
+        if (current_score_.flush_numbers != 0 &&
+            current_score_.immutable_number > 1) {
+          // Bandwidth congestion detected!!! Enter the stable Level
+          current_stage = kStabilizing;
+          result.ThreadOp = kHalf;
+        }  // In other cases, there's simply no flush jobs have been finished or
+           // triggered
+      }
+      if (current_score_.l0_num >= 1) {
+        result.ThreadOp = kDouble;
+      } else if (current_score_.l0_num >= LO_threshold) {
+        result.ThreadOp = kLinearIncrease;
+      }
+
+      if (current_score_.flush_speed_avg <=
+          slow_down_threshold * max_scores.flush_speed_avg) {
+        max_thread = core_num;
+        current_stage = kBoundaryDetection;
+      }
+    } break;
+    case kBoundaryDetection: {
+      result.ThreadOp = kLinearIncrease;
+      if (current_score_.flush_speed_avg <=
+          bandwidth_congestion_threshold * max_scores.flush_speed_avg) {
+        // Flush is too slow
+        if (current_score_.flush_numbers != 0) {
+          // Bandwidth congestion detected!!! Enter the stable Level
+          current_stage = kStabilizing;
+          max_thread = current_opt.max_background_jobs;
+          result.ThreadOp = kHalf;
+          max_thread = std::min(max_thread, core_num);
+        }  // In other cases, there's simply no flush jobs have been
+           // finished or triggered
+      }
+    } break;
+    case kStabilizing: {
+      result.ThreadOp = kKeep;
+      if (current_score_.l0_num >= 1) {
+        result.ThreadOp = kDouble;
+      } else if (current_score_.l0_num >= LO_threshold) {
+        result.ThreadOp = kLinearIncrease;
+      }
+
+      if (current_score_.estimate_compaction_bytes >= RO_threshold) {
+        result.ThreadOp = kLinearIncrease;
+      }
+      if (current_score_.total_idle_time >= idle_threshold) {
+        result.ThreadOp = kLinearDecrease;
+      }
+
+    } break;
+  }
+
+  recent_ops.push_back(result);
+  result.BatchOp = kKeep;
+  if (recent_ops.size() > DOTA_Tuner::score_array_len) {
+    recent_ops.pop_front();
+    // check the frequency every 10 times;
+    int adjust_count = 0;
+    for (auto op : recent_ops) {
+      if (op.ThreadOp != kKeep) {
+        adjust_count++;
+      }
+      if (batch_changing_frequency * score_array_len <= adjust_count) {
+        result.BatchOp = kDouble;
+        recent_ops.clear();
+      }
+    }
+  }
+
+  std::cout << StageString(current_stage) << "," << OpString(result.ThreadOp)
+            << "," << OpString(result.BatchOp) << ","
+            << current_opt.max_background_jobs << ","
+            << (current_opt.write_buffer_size >> 20) << std::endl;
+  return result;
+}
+TuningOP FEAT_Tuner::TuneByFEA() { return TuningOP(); }
 
 }  // namespace ROCKSDB_NAMESPACE

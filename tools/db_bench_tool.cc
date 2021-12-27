@@ -640,6 +640,8 @@ DEFINE_int64(max_memtable_size, ROCKSDB_NAMESPACE::Options().max_memtable_size,
 DEFINE_bool(DOTA_enabled, false, "Whether trigger the DOTA framework");
 DEFINE_bool(FEA_enable, false, "Trigger FEAT tuner's FEA component");
 DEFINE_bool(TEA_enable, false, "Trigger FEAT tuner's TEA component");
+DEFINE_double(TEA_k, 0.75, "Threshold of TEA's tuning round");
+DEFINE_double(FEA_k, 0.75, "Threshold of FEA's Batch Gap");
 DEFINE_bool(Funnel_enable, false, "Use Funnel shape model");
 DEFINE_int64(DOTA_tuning_gap, 0, "Tuning gap of the DOTA agent, in secs ");
 DEFINE_bool(mutable_compaction_thread_prior, false,
@@ -3003,6 +3005,9 @@ class Benchmark {
 
     if (FLAGS_DOTA_enabled || FLAGS_TEA_enable || FLAGS_FEA_enable) {
       FLAGS_report_bg_io_stats = true;
+      FLAGS_report_interval_seconds = FLAGS_report_interval_seconds == 0
+                                          ? 1
+                                          : FLAGS_report_interval_seconds;
     }
 
     //    ParseColumnFamilyOption();

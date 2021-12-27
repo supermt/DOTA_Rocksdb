@@ -93,13 +93,10 @@ class DOTA_Tuner {
   Version* version;
   ColumnFamilyData* cfd;
   VersionStorageInfo* vfs;
-  const static int locating_rounds = 5;
-  const static int locating_before =
-      15;  // the first secs, locate the system behavior first
   DBImpl* running_db_;
   int64_t* last_report_ptr;
   std::atomic<int64_t>* total_ops_done_ptr_;
-  std::vector<SystemScores> scores;
+  std::deque<SystemScores> scores;
   std::vector<ScoreGradient> gradients;
   int current_sec;
   uint64_t flush_list_accessed, compaction_list_accessed;
@@ -112,6 +109,9 @@ class DOTA_Tuner {
   uint64_t last_compaction_thread_len;
   Env* env_;
   int tuning_gap;
+  int double_ratio = 2;
+  uint64_t last_unflushed_bytes = 0;
+  const static int score_array_len = 10;
   void UpdateSystemStats() { UpdateSystemStats(running_db_); }
 
  public:
@@ -120,7 +120,7 @@ class DOTA_Tuner {
       : default_opts(opt),
         tuning_rounds(0),
         running_db_(running_db),
-        scores(0),
+        scores(),
         gradients(0),
         current_sec(0),
         flush_list_accessed(0),
@@ -135,7 +135,7 @@ class DOTA_Tuner {
         last_compaction_thread_len(0),
         env_(env),
         tuning_gap(gap_sec),
-        max_thread(running_db->immutable_db_options().core_number),
+        core_num(running_db->immutable_db_options().core_number),
         max_memtable_size(
             running_db->immutable_db_options().max_memtable_size) {
     this->last_report_ptr = last_report_op_ptr;
@@ -216,9 +216,10 @@ class DOTA_Tuner {
   const std::string table_size = "target_file_size_base";
   const std::string max_bg_jobs = "max_background_jobs";
 
-  const uint64_t max_thread;
-  const uint64_t min_thread = 2;
-  const uint64_t max_memtable_size;
+  const int core_num;
+  int max_thread = core_num;
+  const int min_thread = 2;
+  uint64_t max_memtable_size;
   const uint64_t min_memtable_size = 32 << 20;
 
   SystemScores ScoreTheSystem();
@@ -230,20 +231,22 @@ class DOTA_Tuner {
   void FillUpChangeList(std::vector<ChangePoint>* change_list, TuningOP op);
   void SetBatchSize(std::vector<ChangePoint>* change_list,
                     uint64_t target_value);
-  void SetThreadNum(std::vector<ChangePoint>* change_list,
-                    uint64_t target_value);
+  void SetThreadNum(std::vector<ChangePoint>* change_list, int target_value);
 };
 
-enum Stage : int { kSlowStart, kBoundaryDetection, kFlowing };
+enum Stage : int { kSlowStart, kBoundaryDetection, kStabilizing };
 class FEAT_Tuner : public DOTA_Tuner {
  public:
   FEAT_Tuner(const Options opt, DBImpl* running_db, int64_t* last_report_op_ptr,
              std::atomic<int64_t>* total_ops_done_ptr, Env* env, int gap_sec,
-             bool FEA_enable)
+             bool triggerFEA)
       : DOTA_Tuner(opt, running_db, last_report_op_ptr, total_ops_done_ptr, env,
                    gap_sec),
-        triggerFEA(FEA_enable),
+        FEA_enable(triggerFEA),
         current_stage(kSlowStart) {
+    flush_list_from_opt_ptr =
+        this->running_db_->immutable_db_options().flush_stats;
+
     std::cout << "Using FEAT tuner, FEA is "
               << (FEA_enable ? "triggered" : "NOT triggered") << std::endl;
   }
@@ -251,9 +254,50 @@ class FEAT_Tuner : public DOTA_Tuner {
                               std::vector<ChangePoint>* change_list) override;
   ~FEAT_Tuner() override;
 
+  TuningOP TuneByTEA();
+  TuningOP TuneByFEA();
+
  private:
-  bool triggerFEA;
+  bool FEA_enable;
+  SystemScores current_score_;
+  std::deque<TuningOP> recent_ops;
   Stage current_stage;
+  double bandwidth_congestion_threshold = 0.3;
+  double slow_down_threshold = 0.75;
+  double RO_threshold = 0.8;
+  double LO_threshold = 0.7;
+  double idle_threshold = 2.5;
+  double batch_changing_frequency = 0.7;
+  int congestion_threads = min_thread;
+  //  int double_ratio = 4;
+  SystemScores normalize(SystemScores& origin_score);
+
+  inline const char* StageString(Stage v) {
+    switch (v) {
+      case kSlowStart:
+        return "slow start";
+      case kBoundaryDetection:
+        return "Boundary Detection";
+      case kStabilizing:
+        return "Stabilizing";
+    }
+    return "unknown operation";
+  }
 };
+inline const char* OpString(OpType v) {
+  switch (v) {
+    case kDouble:
+      return "Double";
+    case kLinearIncrease:
+      return "Linear Increase";
+    case kLinearDecrease:
+      return "Linear Decrease";
+    case kHalf:
+      return "Half";
+    case kKeep:
+      return "Keep";
+  }
+  return "unknown operation";
+}
 }  // namespace ROCKSDB_NAMESPACE
 #endif  // ROCKSDB_DOTA_TUNER_H
