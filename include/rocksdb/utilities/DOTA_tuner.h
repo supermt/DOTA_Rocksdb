@@ -260,6 +260,7 @@ class FEAT_Tuner : public DOTA_Tuner {
  private:
   bool FEA_enable;
   SystemScores current_score_;
+  SystemScores head_score_;
   std::deque<TuningOP> recent_ops;
   Stage current_stage;
   double bandwidth_congestion_threshold = 0.7;

@@ -383,6 +383,7 @@ TuningOP FEAT_Tuner::TuneByTEA() {
   switch (current_stage) {
     case kSlowStart: {
       result.ThreadOp = kDouble;
+      head_score_ = current_score_;
       // if MO happens, stop the increment
       if (current_score_.flush_speed_avg <=
           bandwidth_congestion_threshold * max_scores.flush_speed_avg) {
@@ -454,7 +455,7 @@ TuningOP FEAT_Tuner::TuneByTEA() {
   // small, but the flush jobs is occupied, it will have to increase the
   // Memtable size
   if (current_score_.memtable_speed <=
-      MO_threshold * max_scores.memtable_speed) {
+      MO_threshold * head_score_.flush_speed_avg) {
     result.ThreadOp = kDouble;
     result.BatchOp = kDouble;
   }
