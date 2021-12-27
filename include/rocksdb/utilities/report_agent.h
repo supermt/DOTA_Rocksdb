@@ -134,7 +134,7 @@ class ReporterAgentWithTuning : public ReporterAgent {
   uint64_t last_compaction_thread_len;
   uint64_t last_flush_thread_len;
   std::map<std::string, void*> string_to_attributes_map;
-  DOTA_Tuner tuner;
+  std::unique_ptr<DOTA_Tuner> tuner;
   static std::string DOTAHeader() {
     return "secs_elapsed,interval_qps,batch_size,thread_num";
   }
@@ -167,7 +167,8 @@ class ReporterAgentWithTuning : public ReporterAgent {
   }
 
   Status ReportLine(int secs_elapsed, int total_ops_done_snapshot) override;
-//  void print_useless_thing(int secs_elapsed);
+  void UseFEATTuner(bool FEA_enable);
+  //  void print_useless_thing(int secs_elapsed);
   void DetectAndTuning(int secs_elapsed) override;
   enum CongestionStatus {
     kCongestion,

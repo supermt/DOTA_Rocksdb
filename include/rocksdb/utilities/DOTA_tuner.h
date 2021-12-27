@@ -86,7 +86,7 @@ struct TuningOP {
   OpType ThreadOp;
 };
 class DOTA_Tuner {
- private:
+ protected:
   const Options default_opts;
   uint64_t tuning_rounds;
   Options current_opt;
@@ -135,10 +135,15 @@ class DOTA_Tuner {
         last_compaction_thread_len(0),
         env_(env),
         tuning_gap(gap_sec),
-        max_thread(running_db->immutable_db_options().core_number) {
+        max_thread(running_db->immutable_db_options().core_number),
+        max_memtable_size(
+            running_db->immutable_db_options().max_memtable_size) {
     this->last_report_ptr = last_report_op_ptr;
     this->total_ops_done_ptr_ = total_ops_done_ptr;
   }
+
+  virtual ~DOTA_Tuner();
+
   inline void UpdateMaxScore(SystemScores& current_score) {
     if (!scores.empty() &&
         current_score.memtable_speed > scores.front().memtable_speed * 2) {
@@ -193,8 +198,8 @@ class DOTA_Tuner {
     cfd = version->cfd();
     vfs = version->storage_info();
   }
-  void DetectTuningOperations(int secs_elapsed,
-                              std::vector<ChangePoint>* change_list);
+  virtual void DetectTuningOperations(int secs_elapsed,
+                                      std::vector<ChangePoint>* change_list);
 
   ScoreGradient CompareWithBefore() { return scores.back() - scores.front(); }
   ScoreGradient CompareWithBefore(SystemScores& past_score) {
@@ -213,7 +218,7 @@ class DOTA_Tuner {
 
   const uint64_t max_thread;
   const uint64_t min_thread = 2;
-  const uint64_t max_memtable_size = 512 << 20;
+  const uint64_t max_memtable_size;
   const uint64_t min_memtable_size = 32 << 20;
 
   SystemScores ScoreTheSystem();
@@ -227,6 +232,28 @@ class DOTA_Tuner {
                     uint64_t target_value);
   void SetThreadNum(std::vector<ChangePoint>* change_list,
                     uint64_t target_value);
+};
+
+enum Stage : int { kSlowStart, kBoundaryDetection, kFlowing };
+class FEAT_Tuner : public DOTA_Tuner {
+ public:
+  FEAT_Tuner(const Options opt, DBImpl* running_db, int64_t* last_report_op_ptr,
+             std::atomic<int64_t>* total_ops_done_ptr, Env* env, int gap_sec,
+             bool FEA_enable)
+      : DOTA_Tuner(opt, running_db, last_report_op_ptr, total_ops_done_ptr, env,
+                   gap_sec),
+        triggerFEA(FEA_enable),
+        current_stage(kSlowStart) {
+    std::cout << "Using FEAT tuner, FEA is "
+              << (FEA_enable ? "triggered" : "NOT triggered") << std::endl;
+  }
+  void DetectTuningOperations(int secs_elapsed,
+                              std::vector<ChangePoint>* change_list) override;
+  ~FEAT_Tuner() override;
+
+ private:
+  bool triggerFEA;
+  Stage current_stage;
 };
 }  // namespace ROCKSDB_NAMESPACE
 #endif  // ROCKSDB_DOTA_TUNER_H

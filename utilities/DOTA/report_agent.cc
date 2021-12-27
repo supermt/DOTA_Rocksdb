@@ -30,48 +30,9 @@ Status ReporterAgent::ReportLine(int secs_elapsed,
 
 void ReporterAgentWithTuning::DetectChangesPoints(int sec_elapsed) {
   std::vector<ChangePoint> change_points;
-  tuner.DetectTuningOperations(sec_elapsed, &change_points);
+  tuner->DetectTuningOperations(sec_elapsed, &change_points);
   ApplyChangePointsInstantly(&change_points);
 }
-
-// void ReporterAgentWithTuning::print_useless_thing(int secs_elapsed) {
-//   // clear the vector once we print out the message
-//   for (auto compaction_stat :
-//        *this->running_db_->immutable_db_options().job_stats.get()) {
-//     std::cout << "L0 overlapping ratio: " << compaction_stat.drop_ratio
-//               << std::endl;
-//     std::cout << "CPU Time ratio: " << compaction_stat.cpu_time_ratio
-//               << std::endl;
-//     std::cout << "Background Limits"
-//               << "compaction_job: " << compaction_stat.max_bg_compaction <<
-//               ","
-//               << "flush_job: " << compaction_stat.max_bg_flush << std::endl;
-//     std::cout << "Read/Write bandwidth" << compaction_stat.read_in_bandwidth
-//               << "/" << compaction_stat.write_out_bandwidth << std::endl;
-//   }
-//   std::cout <<
-//   this->running_db_->immutable_db_options().job_stats.get()->size()
-//             << " Compaction(s) triggered" << std::endl;
-//   std::cout << "Flushing thread idle time: " << std::endl;
-//   auto flush_thread_idle_list = *env_->GetThreadPoolWaitingTime(Env::HIGH);
-//   auto compaction_thread_idle_list =
-//   *env_->GetThreadPoolWaitingTime(Env::LOW);
-//
-//   uint64_t temp = flush_thread_idle_list.size();
-//   for (uint64_t i = last_flush_thread_len; i < temp; i++) {
-//     std::cout << flush_thread_idle_list[i].first << " : "
-//               << flush_thread_idle_list[i].second << std::endl;
-//   }
-//   last_flush_thread_len = temp;
-//
-//   std::cout << "Compaction thread idle time: " << std::endl;
-//   temp = compaction_thread_idle_list.size();
-//   for (uint64_t i = last_compaction_thread_len; i < temp; i++) {
-//     std::cout << compaction_thread_idle_list[i].first << " : "
-//               << compaction_thread_idle_list[i].second << std::endl;
-//   }
-//   last_compaction_thread_len = temp;
-// }
 
 void ReporterAgentWithTuning::DetectAndTuning(int secs_elapsed) {
   if (secs_elapsed % tuning_gap_secs_ == 0) {
@@ -98,6 +59,12 @@ Status ReporterAgentWithTuning::ReportLine(int secs_elapsed,
   auto s = report_file_->Append(report);
   return s;
 }
+void ReporterAgentWithTuning::UseFEATTuner(bool FEA_enable) {
+  tuner.release();
+  tuner.reset(new FEAT_Tuner(options_when_boost, running_db_, &last_report_,
+                             &total_ops_done_, env_, tuning_gap_secs_,
+                             FEA_enable));
+};
 void ReporterAgentWithTuning::ApplyChangePointsInstantly(
     std::vector<ChangePoint>* points) {
   std::unordered_map<std::string, std::string> new_cf_options;
@@ -134,9 +101,7 @@ ReporterAgentWithTuning::ReporterAgentWithTuning(DBImpl* running_db, Env* env,
                                                  uint64_t report_interval_secs,
                                                  uint64_t dota_tuning_gap_secs)
     : ReporterAgent(env, fname, report_interval_secs, DOTAHeader()),
-      options_when_boost(running_db->GetOptions()),
-      tuner(options_when_boost, running_db, &last_report_, &total_ops_done_,
-            env, dota_tuning_gap_secs) {
+      options_when_boost(running_db->GetOptions()) {
   tuning_points = std::vector<ChangePoint>();
   tuning_points.clear();
   std::cout << "using reporter agent with change points." << std::endl;
@@ -150,7 +115,9 @@ ReporterAgentWithTuning::ReporterAgentWithTuning(DBImpl* running_db, Env* env,
   this->last_metrics_collect_secs = 0;
   this->last_compaction_thread_len = 0;
   this->last_flush_thread_len = 0;
-  tuner.ResetTuner();
+  tuner.reset(new DOTA_Tuner(options_when_boost, running_db_, &last_report_,
+                             &total_ops_done_, env_, tuning_gap_secs_));
+  tuner->ResetTuner();
 }
 
 inline double average(std::vector<double>& v) {

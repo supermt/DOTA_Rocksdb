@@ -638,6 +638,8 @@ DEFINE_int64(core_num, 24, "The limit of thread number");
 DEFINE_int64(max_memtable_size, ROCKSDB_NAMESPACE::Options().max_memtable_size,
              "The size of Max batch size");
 DEFINE_bool(DOTA_enabled, false, "Whether trigger the DOTA framework");
+DEFINE_bool(FEA_enable, false, "Trigger FEAT tuner's FEA component");
+DEFINE_bool(TEA_enable, false, "Trigger FEAT tuner's TEA component");
 DEFINE_bool(Funnel_enable, false, "Use Funnel shape model");
 DEFINE_int64(DOTA_tuning_gap, 0, "Tuning gap of the DOTA agent, in secs ");
 DEFINE_bool(mutable_compaction_thread_prior, false,
@@ -2992,11 +2994,14 @@ class Benchmark {
     } else if (FLAGS_DOTA_enabled) {
       std::cout << "use internal DOTA frameworks" << std::endl;
       // create the Tuner here.
+    } else if (FLAGS_TEA_enable || FLAGS_FEA_enable) {
+      std::cout << "use the FEAT tuner " << std::endl;
 
     } else {
       std::cout << "no tuner" << std::endl;
     }
-    if (FLAGS_DOTA_enabled) {
+
+    if (FLAGS_DOTA_enabled || FLAGS_TEA_enable || FLAGS_FEA_enable) {
       FLAGS_report_bg_io_stats = true;
     }
 
@@ -3507,7 +3512,8 @@ class Benchmark {
 
     std::unique_ptr<ReporterAgent> reporter_agent;
     if (FLAGS_report_interval_seconds > 0) {
-      if (change_point_num > 0 || FLAGS_DOTA_enabled) {
+      if (change_point_num > 0 || FLAGS_DOTA_enabled || FLAGS_TEA_enable ||
+          FLAGS_FEA_enable) {
         // need to use another Report Agent
         if (FLAGS_DOTA_tuning_gap == 0) {
           reporter_agent.reset(new ReporterAgentWithTuning(
@@ -3518,6 +3524,9 @@ class Benchmark {
               reinterpret_cast<DBImpl*>(db_.db), FLAGS_env, FLAGS_report_file,
               FLAGS_report_interval_seconds, FLAGS_DOTA_tuning_gap));
         }
+        auto tuner_agent =
+            reinterpret_cast<ReporterAgentWithTuning*>(reporter_agent.get());
+        tuner_agent->UseFEATTuner(FLAGS_FEA_enable);
 
         for (auto point : config_change_points) {
           reporter_agent->InsertNewTuningPoints(point);
