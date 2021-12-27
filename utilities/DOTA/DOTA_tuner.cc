@@ -401,9 +401,7 @@ TuningOP FEAT_Tuner::TuneByTEA() {
         result.ThreadOp = kLinearIncrease;
       }
 
-      if (current_score_.flush_speed_avg <=
-          slow_down_threshold * max_scores.flush_speed_avg) {
-        max_thread = core_num;
+      if (current_opt.max_background_jobs >= 0.75 * max_thread) {
         current_stage = kBoundaryDetection;
       }
     } break;
@@ -424,24 +422,42 @@ TuningOP FEAT_Tuner::TuneByTEA() {
     } break;
     case kStabilizing: {
       result.ThreadOp = kKeep;
+      if (current_score_.total_idle_time >= idle_threshold) {
+        result.ThreadOp = kLinearDecrease;
+      }
+      if (current_score_.estimate_compaction_bytes >= RO_threshold) {
+        result.ThreadOp = kLinearIncrease;
+      }
+
       if (current_score_.l0_num >= 1) {
         result.ThreadOp = kDouble;
       } else if (current_score_.l0_num >= LO_threshold) {
         result.ThreadOp = kLinearIncrease;
       }
 
-      if (current_score_.estimate_compaction_bytes >= RO_threshold) {
-        result.ThreadOp = kLinearIncrease;
-      }
-      if (current_score_.total_idle_time >= idle_threshold) {
-        result.ThreadOp = kLinearDecrease;
+      if (current_score_.flush_speed_avg <=
+          bandwidth_congestion_threshold * max_scores.flush_speed_avg) {
+        // Flush is too slow
+        if (current_score_.flush_numbers != 0 &&
+            current_score_.immutable_number > 1) {
+          // Bandwidth congestion detected!!! Enter the stable Level
+          result.ThreadOp = kHalf;
+          result.BatchOp = kDouble;
+        }  // In other cases, there's simply no flush jobs have been finished or
+           // triggered
       }
 
     } break;
   }
-
-  recent_ops.push_back(result);
   result.BatchOp = kKeep;
+  // There's a case that Flush speed can't detect, when the memtable is too
+  // small, but the flush jobs is occupied, it will have to increase the
+  // Memtable size
+  if (current_score_.memtable_speed <=
+      MO_threshold * max_scores.memtable_speed) {
+    result.BatchOp = kDouble;
+  }
+
   if (recent_ops.size() > DOTA_Tuner::score_array_len) {
     recent_ops.pop_front();
     // check the frequency every 10 times;
@@ -456,6 +472,7 @@ TuningOP FEAT_Tuner::TuneByTEA() {
       }
     }
   }
+  recent_ops.push_back(result);
 
   std::cout << StageString(current_stage) << "," << OpString(result.ThreadOp)
             << "," << OpString(result.BatchOp) << ","

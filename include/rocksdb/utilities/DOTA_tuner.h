@@ -262,10 +262,11 @@ class FEAT_Tuner : public DOTA_Tuner {
   SystemScores current_score_;
   std::deque<TuningOP> recent_ops;
   Stage current_stage;
-  double bandwidth_congestion_threshold = 0.3;
+  double bandwidth_congestion_threshold = 0.7;
   double slow_down_threshold = 0.75;
   double RO_threshold = 0.8;
   double LO_threshold = 0.7;
+  double MO_threshold = 0.5;
   double idle_threshold = 2.5;
   double batch_changing_frequency = 0.7;
   int congestion_threads = min_thread;
