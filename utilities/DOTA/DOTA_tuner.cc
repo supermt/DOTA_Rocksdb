@@ -337,7 +337,7 @@ SystemScores SystemScores::operator-(const SystemScores &a) {
 }
 FEAT_Tuner::~FEAT_Tuner() = default;
 
-void FEAT_Tuner::DetectTuningOperations(int secs_elapsed,
+void FEAT_Tuner::DetectTuningOperations(int /*secs_elapsed*/,
                                         std::vector<ChangePoint> *change_list) {
   //   first, we tune only when the flushing speed is slower than before
   //  UpdateSystemStats();
