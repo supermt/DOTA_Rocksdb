@@ -1164,6 +1164,13 @@ struct DBOptions {
   // not be used for recovery if best_efforts_recovery is true.
   // Default: false
   bool best_efforts_recovery = false;
+
+  // This is an immutable option, that indicates the max core number we can use
+  // in the system.
+  uint64_t core_number = 12;
+  // Here is the max size of target system. It surppose to be immutable, but
+  // who knows.
+  uint64_t max_memtable_size = 512 << 20;
 };
 
 // Options to control the behavior of a database (passed to DB::Open)

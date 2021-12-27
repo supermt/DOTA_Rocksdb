@@ -90,6 +90,8 @@ struct ImmutableDBOptions {
   size_t log_readahead_size;
   std::shared_ptr<FileChecksumGenFactory> file_checksum_gen_factory;
   bool best_efforts_recovery;
+  uint64_t core_number;
+  uint64_t max_memtable_size;
   std::shared_ptr<std::vector<QuicksandMetrics>> job_stats;
   std::shared_ptr<std::vector<FlushMetrics>> flush_stats;
   std::shared_ptr<std::vector<HitPosition>> hit_records;

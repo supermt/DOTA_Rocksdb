@@ -10,7 +10,7 @@
 namespace ROCKSDB_NAMESPACE {
 
 enum ThreadStallLevels : int {
-//  kLowFlush,
+  //  kLowFlush,
   kL0Stall,
   kPendingBytes,
   kGoodArea,
@@ -134,7 +134,8 @@ class DOTA_Tuner {
         last_flush_thread_len(0),
         last_compaction_thread_len(0),
         env_(env),
-        tuning_gap(gap_sec) {
+        tuning_gap(gap_sec),
+        max_thread(running_db->immutable_db_options().core_number) {
     this->last_report_ptr = last_report_op_ptr;
     this->total_ops_done_ptr_ = total_ops_done_ptr;
   }
@@ -210,7 +211,7 @@ class DOTA_Tuner {
   const std::string table_size = "target_file_size_base";
   const std::string max_bg_jobs = "max_background_jobs";
 
-  const uint64_t max_thread = 24;
+  const uint64_t max_thread;
   const uint64_t min_thread = 2;
   const uint64_t max_memtable_size = 512 << 20;
   const uint64_t min_memtable_size = 32 << 20;

@@ -634,6 +634,9 @@ DEFINE_string(change_points, "",
 DEFINE_string(ycsb_workload, "", "The workload of YCSB");
 DEFINE_int64(load_num, 100000, "Num of operations in loading phrase");
 DEFINE_int64(running_num, 100000, "Num of operations in running phrase");
+DEFINE_int64(core_num, 24, "The limit of thread number");
+DEFINE_int64(max_memtable_size, ROCKSDB_NAMESPACE::Options().max_memtable_size,
+             "The size of Max batch size");
 DEFINE_bool(DOTA_enabled, false, "Whether trigger the DOTA framework");
 DEFINE_bool(Funnel_enable, false, "Use Funnel shape model");
 DEFINE_int64(DOTA_tuning_gap, 0, "Tuning gap of the DOTA agent, in secs ");
@@ -4221,6 +4224,8 @@ class Benchmark {
     }
 
     options.create_if_missing = !FLAGS_use_existing_db;
+    options.core_number = FLAGS_core_num;
+    options.max_memtable_size = FLAGS_max_memtable_size;
     options.dump_malloc_stats = FLAGS_dump_malloc_stats;
     options.stats_dump_period_sec =
         static_cast<unsigned int>(FLAGS_stats_dump_period_sec);
@@ -4672,7 +4677,7 @@ class Benchmark {
     Duration loading_duration(test_duration, remain_loading, ops_per_stage);
     Duration running_duration(test_duration, remain_running, ops_per_stage);
     int stage = 0;
-//    WriteBatch batch;
+    //    WriteBatch batch;
     Status s;
     RandomGenerator gen;
     int64_t bytes = 0;
@@ -4680,42 +4685,39 @@ class Benchmark {
     rocksdb::ReadOptions r_op;
     rocksdb::WriteOptions w_op;
 
-   try{
-        if (load) {
-          while (!duration.Done(entries_per_batch_)) {
-            DB* db = SelectDB(thread);
-            if (duration.GetStage() != stage) {
-              stage = duration.GetStage();
-              if (db_.db != nullptr) {
-                db_.CreateNewCf(open_options_, stage);
-              } else {
-                for (auto& input_db : multi_dbs_) {
-                  input_db.CreateNewCf(open_options_, stage);
-                }
-              }
+    if (load) {
+      while (!duration.Done(entries_per_batch_)) {
+        DB* db = SelectDB(thread);
+        if (duration.GetStage() != stage) {
+          stage = duration.GetStage();
+          if (db_.db != nullptr) {
+            db_.CreateNewCf(open_options_, stage);
+          } else {
+            for (auto& input_db : multi_dbs_) {
+              input_db.CreateNewCf(open_options_, stage);
             }
-            std::string key = workload->BuildKeyName();
-            Slice val = gen.Generate();
-            db_.db->Put(w_op, key, val);
-    
-            int64_t batch_bytes = 0;
-            for (int64_t j = 0; j < entries_per_batch_; j++) {
-              batch_bytes += val.size() + key.size();
-              bytes += val.size() + key.size();
-            }
-            if (thread->shared->write_rate_limiter.get() != nullptr) {
-              thread->shared->write_rate_limiter->Request(
-                  batch_bytes, Env::IO_HIGH, nullptr /* stats */,
-                  RateLimiter::OpType::kWrite);
-              thread->stats.ResetLastOpTime();
-            }
-            thread->stats.FinishedOps(nullptr, db, entries_per_batch_, kWrite);
           }
-          thread->stats.AddBytes(bytes);
-        }    
-    }catch (const std::bad_alloc& e){
-        std::cout << e.what() << std::endl; 
+        }
+        std::string key = workload->BuildKeyName();
+        Slice val = gen.Generate();
+        db_.db->Put(w_op, key, val);
+
+        int64_t batch_bytes = 0;
+        for (int64_t j = 0; j < entries_per_batch_; j++) {
+          batch_bytes += val.size() + key.size();
+          bytes += val.size() + key.size();
+        }
+        if (thread->shared->write_rate_limiter.get() != nullptr) {
+          thread->shared->write_rate_limiter->Request(
+              batch_bytes, Env::IO_HIGH, nullptr /* stats */,
+              RateLimiter::OpType::kWrite);
+          thread->stats.ResetLastOpTime();
+        }
+        thread->stats.FinishedOps(nullptr, db, entries_per_batch_, kWrite);
+      }
+      thread->stats.AddBytes(bytes);
     }
+
     if (run) {
       duration = running_duration;
 

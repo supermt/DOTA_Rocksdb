@@ -465,7 +465,9 @@ ImmutableDBOptions::ImmutableDBOptions(const DBOptions& options)
       write_dbid_to_manifest(options.write_dbid_to_manifest),
       log_readahead_size(options.log_readahead_size),
       file_checksum_gen_factory(options.file_checksum_gen_factory),
-      best_efforts_recovery(options.best_efforts_recovery) {
+      best_efforts_recovery(options.best_efforts_recovery),
+      core_number(options.core_number),
+      max_memtable_size(options.max_memtable_size) {
   job_stats = std::make_shared<std::vector<QuicksandMetrics>>();
   flush_stats = std::make_shared<std::vector<FlushMetrics>>();
   hit_records = std::make_shared<std::vector<HitPosition>>();
