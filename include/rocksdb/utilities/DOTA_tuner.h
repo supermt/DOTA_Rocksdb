@@ -112,6 +112,7 @@ class DOTA_Tuner {
   int double_ratio = 2;
   uint64_t last_unflushed_bytes = 0;
   const static int score_array_len = 10;
+  double idle_threshold = 2.5;
   void UpdateSystemStats() { UpdateSystemStats(running_db_); }
 
  public:
@@ -141,7 +142,7 @@ class DOTA_Tuner {
     this->last_report_ptr = last_report_op_ptr;
     this->total_ops_done_ptr_ = total_ops_done_ptr;
   }
-
+  void set_idle_ratio(double idle_ra) { idle_threshold = idle_ra; }
   virtual ~DOTA_Tuner();
 
   inline void UpdateMaxScore(SystemScores& current_score) {
@@ -268,7 +269,6 @@ class FEAT_Tuner : public DOTA_Tuner {
   double RO_threshold = 0.8;
   double LO_threshold = 0.7;
   double MO_threshold = 0.5;
-  double idle_threshold = 2.5;
   double batch_changing_frequency = 0.7;
   int congestion_threads = min_thread;
   //  int double_ratio = 4;

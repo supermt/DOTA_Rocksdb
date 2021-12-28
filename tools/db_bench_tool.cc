@@ -641,6 +641,8 @@ DEFINE_bool(DOTA_enabled, false, "Whether trigger the DOTA framework");
 DEFINE_bool(FEA_enable, false, "Trigger FEAT tuner's FEA component");
 DEFINE_bool(TEA_enable, false, "Trigger FEAT tuner's TEA component");
 DEFINE_double(TEA_k, 0.75, "Threshold of TEA's tuning round");
+DEFINE_double(idle_rate, 2.5,
+              "TEA will decide this as the idle rate of the threads");
 DEFINE_double(FEA_k, 0.75, "Threshold of FEA's Batch Gap");
 DEFINE_bool(Funnel_enable, false, "Use Funnel shape model");
 DEFINE_int64(DOTA_tuning_gap, 0, "Tuning gap of the DOTA agent, in secs ");
@@ -3532,6 +3534,7 @@ class Benchmark {
         auto tuner_agent =
             reinterpret_cast<ReporterAgentWithTuning*>(reporter_agent.get());
         tuner_agent->UseFEATTuner(FLAGS_FEA_enable);
+        tuner_agent->GetTuner()->set_idle_ratio(FLAGS_idle_rate);
 
         for (auto point : config_change_points) {
           reporter_agent->InsertNewTuningPoints(point);

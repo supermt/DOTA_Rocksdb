@@ -154,7 +154,7 @@ class ReporterAgentWithTuning : public ReporterAgent {
                           const std::string& fname,
                           uint64_t report_interval_secs,
                           uint64_t dota_tuning_gap_secs = 1);
-
+  DOTA_Tuner* GetTuner() { return tuner.get(); }
   void ApplyChangePointsInstantly(std::vector<ChangePoint>* points);
 
   void DetectChangesPoints(int sec_elapsed);

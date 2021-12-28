@@ -423,9 +423,9 @@ TuningOP FEAT_Tuner::TuneByTEA() {
     } break;
     case kStabilizing: {
       result.ThreadOp = kKeep;
-//      if (current_score_.total_idle_time >= idle_threshold) {
-//        result.ThreadOp = kLinearDecrease;
-//      }
+      if (current_score_.total_idle_time >= idle_threshold) {
+        result.ThreadOp = kLinearDecrease;
+      }
       if (current_score_.estimate_compaction_bytes >= RO_threshold) {
         result.ThreadOp = kLinearIncrease;
       }
@@ -459,17 +459,20 @@ TuningOP FEAT_Tuner::TuneByTEA() {
     result.ThreadOp = kHalf;
     result.BatchOp = kDouble;
   }
-//  if (current_score_.flush_speed_avg <= current_score_.memtable_speed &&
-//      current_score_.flush_numbers != 0) {
-//    result.ThreadOp = kDouble;
-//  }
+
+  //  if (current_score_.flush_speed_avg <= current_score_.memtable_speed &&
+  //      current_score_.flush_numbers != 0) {
+  //    result.ThreadOp = kDouble;
+  //  }
 
   recent_ops.push_back(result);
 
   std::cout << StageString(current_stage) << "," << OpString(result.ThreadOp)
             << "," << OpString(result.BatchOp) << ","
             << current_opt.max_background_jobs << ","
-            << (current_opt.write_buffer_size >> 20) << std::endl;
+            << (current_opt.write_buffer_size >> 20) << ","
+            << current_score_.total_idle_time << std::endl;
+
   return result;
 }
 TuningOP FEAT_Tuner::TuneByFEA() { return TuningOP(); }
