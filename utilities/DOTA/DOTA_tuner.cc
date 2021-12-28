@@ -50,7 +50,7 @@ ThreadStallLevels DOTA_Tuner::LocateThreadStates(SystemScores &score) {
     } else if (score.estimate_compaction_bytes > 0.5) {
       return kPendingBytes;
     }
-  } else if (score.total_idle_time > 2.5) {
+  } else if (score.compaction_idle_time > 2.5) {
     return kIdle;
   }
   return kGoodArea;
@@ -156,35 +156,22 @@ SystemScores DOTA_Tuner::ScoreTheSystem() {
   auto compaction_thread_idle_list = *env_->GetThreadPoolWaitingTime(Env::LOW);
   std::unordered_map<int, uint64_t> thread_idle_time;
   uint64_t temp = flush_thread_idle_list.size();
-
   for (uint64_t i = last_flush_thread_len; i < temp; i++) {
     auto temp_entry = flush_thread_idle_list[i];
-    int key = -(int)(temp_entry.first + 1);
     auto value = temp_entry.second;
-    try {
-      thread_idle_time.at(key) += value;
-    } catch (std::out_of_range &e) {
-      thread_idle_time.emplace(key, value);
-    }
+    current_score.flush_idle_time += value;
   }
   temp = compaction_thread_idle_list.size();
   for (uint64_t i = last_compaction_thread_len; i < temp; i++) {
     auto temp_entry = compaction_thread_idle_list[i];
-    int key = (int)(temp_entry.first + 1);
     auto value = temp_entry.second;
-    try {
-      thread_idle_time.at(key) += value;
-    } catch (std::out_of_range &e) {
-      thread_idle_time.emplace(key, value);
-    }
+    current_score.compaction_idle_time += value;
   }
-
-  for (auto entry : thread_idle_time) {
-    double idle_ratio = (double)entry.second / (kMicrosInSecond * tuning_gap);
-    current_score.total_idle_time += idle_ratio;
-  }
-
-  current_score.total_idle_time /= current_opt.max_background_jobs;
+  current_score.flush_idle_time /=
+      (current_opt.max_background_jobs * kMicrosInSecond / 4);
+  // flush threads always get 1/4 of all
+  current_score.compaction_idle_time /=
+      (current_opt.max_background_jobs * kMicrosInSecond);
 
   // clean up
   flush_list_accessed = flush_result_length;
@@ -331,7 +318,9 @@ SystemScores SystemScores::operator-(const SystemScores &a) {
   temp.estimate_compaction_bytes =
       this->estimate_compaction_bytes - a.estimate_compaction_bytes;
   temp.disk_bandwidth = this->disk_bandwidth - a.disk_bandwidth;
-  temp.total_idle_time = this->total_idle_time - a.total_idle_time;
+  temp.compaction_idle_time =
+      this->compaction_idle_time - a.compaction_idle_time;
+  temp.flush_idle_time = this->flush_idle_time - a.flush_idle_time;
 
   return temp;
 }
@@ -401,31 +390,28 @@ TuningOP FEAT_Tuner::TuneByTEA() {
       } else if (current_score_.l0_num >= LO_threshold) {
         result.ThreadOp = kLinearIncrease;
       }
-
-      if (current_opt.max_background_jobs >= 0.75 * max_thread) {
-        current_stage = kBoundaryDetection;
-      }
-    } break;
-    case kBoundaryDetection: {
-      result.ThreadOp = kLinearIncrease;
-      if (current_score_.flush_speed_avg <=
-          bandwidth_congestion_threshold * max_scores.flush_speed_avg) {
-        // Flush is too slow
-        if (current_score_.flush_numbers != 0) {
-          // Bandwidth congestion detected!!! Enter the stable Level
-          current_stage = kStabilizing;
-          max_thread = current_opt.max_background_jobs;
-          result.ThreadOp = kHalf;
-          max_thread = std::min(max_thread, core_num);
-        }  // In other cases, there's simply no flush jobs have been
-           // finished or triggered
+      if (current_score_.compaction_idle_time >= idle_threshold * tuning_gap ||
+          current_score_.flush_idle_time >= idle_threshold * tuning_gap ||
+          current_opt.max_background_jobs >= 0.75 * max_thread) {
+        current_stage = kStabilizing;
+        result.ThreadOp = kLinearDecrease;
       }
     } break;
     case kStabilizing: {
       result.ThreadOp = kKeep;
-      if (current_score_.total_idle_time >= idle_threshold) {
+      if (current_score_.flush_idle_time <= 0.5) {
+        // flushing threads are busy
+        result.ThreadOp = kLinearIncrease;
+      }
+      if (current_score_.compaction_idle_time >= idle_threshold * tuning_gap) {
         result.ThreadOp = kLinearDecrease;
       }
+
+      if (current_score_.flush_numbers > 0 &&
+          current_score_.flush_idle_time >= idle_threshold * tuning_gap) {
+        result.ThreadOp = kLinearDecrease;
+      }
+
       if (current_score_.estimate_compaction_bytes >= RO_threshold) {
         result.ThreadOp = kLinearIncrease;
       }
@@ -442,7 +428,6 @@ TuningOP FEAT_Tuner::TuneByTEA() {
         if (current_score_.flush_numbers != 0 &&
             current_score_.immutable_number > 1) {
           // Bandwidth congestion detected!!! Enter the stable Level
-          result.ThreadOp = kHalf;
           result.BatchOp = kDouble;
         }  // In other cases, there's simply no flush jobs have been finished or
            // triggered
@@ -451,19 +436,16 @@ TuningOP FEAT_Tuner::TuneByTEA() {
     } break;
   }
   result.BatchOp = kKeep;
-  // There's a case that Flush speed can't detect, when the memtable is too
-  // small, but the flush jobs is occupied, it will have to increase the
-  // Memtable size
-  if (current_score_.memtable_speed <=
-      MO_threshold * head_score_.memtable_speed) {
-    result.ThreadOp = kHalf;
-    result.BatchOp = kDouble;
-  }
 
-  //  if (current_score_.flush_speed_avg <= current_score_.memtable_speed &&
-  //      current_score_.flush_numbers != 0) {
-  //    result.ThreadOp = kDouble;
-  //  }
+  if (current_score_.flush_speed_avg < 1.5 * current_score_.memtable_speed) {
+    if (current_score_.flush_numbers > 0 && current_stage == kStabilizing) {
+      result.BatchOp = kDouble;
+    }
+    if (current_score_.memtable_speed <
+        MO_threshold * head_score_.memtable_speed) {
+      result.ThreadOp = kHalf;
+    }
+  }
 
   recent_ops.push_back(result);
 
@@ -471,7 +453,8 @@ TuningOP FEAT_Tuner::TuneByTEA() {
             << "," << OpString(result.BatchOp) << ","
             << current_opt.max_background_jobs << ","
             << (current_opt.write_buffer_size >> 20) << ","
-            << current_score_.total_idle_time << std::endl;
+            << current_score_.flush_idle_time << ","
+            << current_score_.compaction_idle_time << std::endl;
 
   return result;
 }
