@@ -645,7 +645,7 @@ DEFINE_double(idle_rate, 2.5,
               "TEA will decide this as the idle rate of the threads");
 DEFINE_double(FEA_k, 0.75, "Threshold of FEA's Batch Gap");
 DEFINE_bool(Funnel_enable, false, "Use Funnel shape model");
-DEFINE_int64(DOTA_tuning_gap, 0, "Tuning gap of the DOTA agent, in secs ");
+DEFINE_int64(DOTA_tuning_gap, 3, "Tuning gap of the DOTA agent, in secs ");
 DEFINE_bool(mutable_compaction_thread_prior, false,
             "trigger multi_level compaction prior");
 DEFINE_bool(detailed_running_stats, false,

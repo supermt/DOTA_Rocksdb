@@ -38,9 +38,10 @@ struct SystemScores {
   double estimate_compaction_bytes;  // given by the system, divided by the soft
                                      // limit
   // System metrics
-  double disk_bandwidth;   // avg
-  double total_idle_time;  // calculate by idle calculating,flush and compaction
-                           // stats separately
+  double disk_bandwidth;  // avg
+  double flush_idle_time;
+  double compaction_idle_time;  // calculate by idle calculating,flush and
+                                // compaction stats separately
   int flush_numbers;
 
   SystemScores() {
@@ -53,7 +54,7 @@ struct SystemScores {
     l0_drop_ratio = 0.0;
     estimate_compaction_bytes = 0.0;
     disk_bandwidth = 0.0;
-    total_idle_time = 0.0;
+    compaction_idle_time = 0.0;
     flush_numbers = 0;
   }
   void Reset() {
@@ -66,7 +67,7 @@ struct SystemScores {
     l0_drop_ratio = 0.0;
     estimate_compaction_bytes = 0.0;
     disk_bandwidth = 0.0;
-    total_idle_time = 0.0;
+    compaction_idle_time = 0.0;
     flush_numbers = 0;
   }
   SystemScores operator-(const SystemScores& a);
@@ -181,8 +182,11 @@ class DOTA_Tuner {
     if (current_score.disk_bandwidth > max_scores.disk_bandwidth) {
       max_scores.disk_bandwidth = current_score.disk_bandwidth;
     }
-    if (current_score.total_idle_time > max_scores.total_idle_time) {
-      max_scores.total_idle_time = current_score.total_idle_time;
+    if (current_score.flush_idle_time > max_scores.flush_idle_time) {
+      max_scores.flush_idle_time = current_score.flush_idle_time;
+    }
+    if (current_score.compaction_idle_time > max_scores.compaction_idle_time) {
+      max_scores.compaction_idle_time = current_score.compaction_idle_time;
     }
     if (current_score.flush_numbers > max_scores.flush_numbers) {
       max_scores.flush_numbers = current_score.flush_numbers;
@@ -235,7 +239,7 @@ class DOTA_Tuner {
   void SetThreadNum(std::vector<ChangePoint>* change_list, int target_value);
 };
 
-enum Stage : int { kSlowStart, kBoundaryDetection, kStabilizing };
+enum Stage : int { kSlowStart, kStabilizing };
 class FEAT_Tuner : public DOTA_Tuner {
  public:
   FEAT_Tuner(const Options opt, DBImpl* running_db, int64_t* last_report_op_ptr,
@@ -278,8 +282,8 @@ class FEAT_Tuner : public DOTA_Tuner {
     switch (v) {
       case kSlowStart:
         return "slow start";
-      case kBoundaryDetection:
-        return "Boundary Detection";
+//      case kBoundaryDetection:
+//        return "Boundary Detection";
       case kStabilizing:
         return "Stabilizing";
     }
