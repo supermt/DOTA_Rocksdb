@@ -423,9 +423,9 @@ TuningOP FEAT_Tuner::TuneByTEA() {
     } break;
     case kStabilizing: {
       result.ThreadOp = kKeep;
-      if (current_score_.total_idle_time >= idle_threshold) {
-        result.ThreadOp = kLinearDecrease;
-      }
+//      if (current_score_.total_idle_time >= idle_threshold) {
+//        result.ThreadOp = kLinearDecrease;
+//      }
       if (current_score_.estimate_compaction_bytes >= RO_threshold) {
         result.ThreadOp = kLinearIncrease;
       }
@@ -459,10 +459,10 @@ TuningOP FEAT_Tuner::TuneByTEA() {
     result.ThreadOp = kHalf;
     result.BatchOp = kDouble;
   }
-  if (current_score_.flush_speed_avg <= current_score_.memtable_speed &&
-      current_score_.flush_numbers != 0) {
-    result.ThreadOp = kDouble;
-  }
+//  if (current_score_.flush_speed_avg <= current_score_.memtable_speed &&
+//      current_score_.flush_numbers != 0) {
+//    result.ThreadOp = kDouble;
+//  }
 
   recent_ops.push_back(result);
 
