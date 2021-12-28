@@ -114,6 +114,7 @@ class DOTA_Tuner {
   uint64_t last_unflushed_bytes = 0;
   const static int score_array_len = 10;
   double idle_threshold = 2.5;
+  double FEA_gap_threshold = 1;
   void UpdateSystemStats() { UpdateSystemStats(running_db_); }
 
  public:
@@ -144,6 +145,9 @@ class DOTA_Tuner {
     this->total_ops_done_ptr_ = total_ops_done_ptr;
   }
   void set_idle_ratio(double idle_ra) { idle_threshold = idle_ra; }
+  void set_gap_threshold(double ng_threshold) {
+    FEA_gap_threshold = ng_threshold;
+  }
   virtual ~DOTA_Tuner();
 
   inline void UpdateMaxScore(SystemScores& current_score) {
@@ -282,8 +286,8 @@ class FEAT_Tuner : public DOTA_Tuner {
     switch (v) {
       case kSlowStart:
         return "slow start";
-//      case kBoundaryDetection:
-//        return "Boundary Detection";
+        //      case kBoundaryDetection:
+        //        return "Boundary Detection";
       case kStabilizing:
         return "Stabilizing";
     }

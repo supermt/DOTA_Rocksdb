@@ -344,17 +344,18 @@ void FEAT_Tuner::DetectTuningOperations(int /*secs_elapsed*/,
   // if the flushing speed is faster than the k of  former section, skip this
   // round
   //
-  if (current_score.flush_speed_avg >=
-          max_scores.flush_speed_avg * current_opt.TEA_k &&
-      current_score.memtable_speed >=
-          max_scores.memtable_speed * current_opt.TEA_k) {
-    // Flush speed can be 0 for there's no enough data.
-    return;
-  }
+//  if (current_score.flush_speed_avg >=
+//          max_scores.flush_speed_avg * current_opt.TEA_k &&
+//      current_score.memtable_speed >=
+//          max_scores.memtable_speed * current_opt.TEA_k) {
+//    // Flush speed can be 0 for there's no enough data.
+//    return;
+//  }
   current_score_ = current_score;
   TuningOP tea_result = TuneByTEA();
   FillUpChangeList(change_list, tea_result);
-  if (FEA_enable) {
+  if (FEA_enable && tea_result.BatchOp != kDouble &&
+      current_score.memtable_speed >= 0.75 * head_score_.memtable_speed) {
     TuningOP fea_result = TuneByFEA();
     FillUpChangeList(change_list, fea_result);
   }
@@ -458,6 +459,18 @@ TuningOP FEAT_Tuner::TuneByTEA() {
 
   return result;
 }
-TuningOP FEAT_Tuner::TuneByFEA() { return TuningOP(); }
+TuningOP FEAT_Tuner::TuneByFEA() {
+  // batch lock associating control knob
+  // TBC, Batch Controlling
+  TuningOP negative_protocol{kKeep, kKeep};
+  int estimate_no_stall_gap =
+      (current_opt.write_buffer_size >> 20) / current_score_.memtable_speed;
+  if (estimate_no_stall_gap >
+      FEA_gap_threshold * current_opt.max_background_jobs / 4) {
+    std::cout << "long gap," << estimate_no_stall_gap << std::endl;
+    negative_protocol.BatchOp = kLinearDecrease;
+  }
+  return negative_protocol;
+}
 
 }  // namespace ROCKSDB_NAMESPACE
