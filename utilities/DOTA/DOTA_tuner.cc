@@ -455,9 +455,13 @@ TuningOP FEAT_Tuner::TuneByTEA() {
   // small, but the flush jobs is occupied, it will have to increase the
   // Memtable size
   if (current_score_.memtable_speed <=
-      MO_threshold * head_score_.flush_speed_avg) {
+      MO_threshold * head_score_.memtable_speed) {
     result.ThreadOp = kDouble;
     result.BatchOp = kDouble;
+  }
+  if (current_score_.flush_speed_avg <= current_score_.memtable_speed &&
+      current_score_.flush_numbers != 0) {
+    result.ThreadOp = kDouble;
   }
 
   if (recent_ops.size() > DOTA_Tuner::score_array_len) {
