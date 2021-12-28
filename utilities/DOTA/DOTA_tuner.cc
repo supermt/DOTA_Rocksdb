@@ -456,7 +456,7 @@ TuningOP FEAT_Tuner::TuneByTEA() {
   // Memtable size
   if (current_score_.memtable_speed <=
       MO_threshold * head_score_.memtable_speed) {
-    result.ThreadOp = kDouble;
+    result.ThreadOp = kHalf;
     result.BatchOp = kDouble;
   }
   if (current_score_.flush_speed_avg <= current_score_.memtable_speed &&
@@ -464,20 +464,6 @@ TuningOP FEAT_Tuner::TuneByTEA() {
     result.ThreadOp = kDouble;
   }
 
-  if (recent_ops.size() > DOTA_Tuner::score_array_len) {
-    recent_ops.pop_front();
-    // check the frequency every 10 times;
-    int adjust_count = 0;
-    for (auto op : recent_ops) {
-      if (op.ThreadOp != kKeep) {
-        adjust_count++;
-      }
-      if (batch_changing_frequency * score_array_len <= adjust_count) {
-        result.BatchOp = kDouble;
-        recent_ops.clear();
-      }
-    }
-  }
   recent_ops.push_back(result);
 
   std::cout << StageString(current_stage) << "," << OpString(result.ThreadOp)
