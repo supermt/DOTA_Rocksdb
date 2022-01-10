@@ -100,7 +100,6 @@ SystemScores DOTA_Tuner::ScoreTheSystem() {
     }
   }
   int l0_compaction = 0;
-
   auto num_new_flushes = (flush_result_length - flush_list_accessed);
   current_score.flush_numbers = num_new_flushes;
   //  current_score.memtable_speed =
@@ -178,7 +177,6 @@ SystemScores DOTA_Tuner::ScoreTheSystem() {
   compaction_list_accessed = compaction_result_length;
   last_compaction_thread_len = compaction_thread_idle_list.size();
   last_flush_thread_len = flush_thread_idle_list.size();
-
   return current_score;
 }
 
@@ -372,7 +370,7 @@ SystemScores FEAT_Tuner::normalize(SystemScores &origin_score) {
   // the normlization of flushing speed.
   std::cout << origin_score.flush_speed_avg << ","
             << origin_score.memtable_speed << std::endl;
-  origin_score.flush_speed_avg /= origin_score.memtable_speed;
+//  origin_score.flush_speed_avg /= origin_score.memtable_speed;
   return origin_score;
 }
 TuningOP FEAT_Tuner::TuneByTEA() {
@@ -462,12 +460,12 @@ TuningOP FEAT_Tuner::TuneByTEA() {
 
   recent_ops.push_back(result);
 
-  std::cout << StageString(current_stage) << "," << OpString(result.ThreadOp)
-            << "," << OpString(result.BatchOp) << ","
-            << current_opt.max_background_jobs << ","
-            << (current_opt.write_buffer_size >> 20) << ","
-            << current_score_.flush_idle_time << ","
-            << current_score_.compaction_idle_time << std::endl;
+//  std::cout << StageString(current_stage) << "," << OpString(result.ThreadOp)
+//            << "," << OpString(result.BatchOp) << ","
+//            << current_opt.max_background_jobs << ","
+//            << (current_opt.write_buffer_size >> 20) << ","
+//            << current_score_.flush_idle_time << ","
+//            << current_score_.compaction_idle_time << std::endl;
 
   return result;
 }
@@ -481,7 +479,7 @@ TuningOP FEAT_Tuner::TuneByFEA() {
   }
 
   int estimate_no_stall_gap =
-      (current_opt.write_buffer_size >> 20) / current_score_.memtable_speed;
+      (current_opt.write_buffer_size >> 20) / head_score_.memtable_speed;
 
   if (current_score_.estimate_compaction_bytes > 0.8) {
      negative_protocol.BatchOp = kLinearIncrease;
