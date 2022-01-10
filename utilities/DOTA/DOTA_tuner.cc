@@ -352,14 +352,22 @@ void FEAT_Tuner::DetectTuningOperations(int /*secs_elapsed*/,
 //    return;
 //  }
   current_score_ = current_score;
-  TuningOP tea_result = TuneByTEA();
-  FillUpChangeList(change_list, tea_result);
-  if (FEA_enable && tea_result.BatchOp != kDouble &&
-      current_score.memtable_speed >= 0.75 * head_score_.memtable_speed) {
-    TuningOP fea_result = TuneByFEA();
-    FillUpChangeList(change_list, fea_result);
+  if (current_score_.memtable_speed < max_scores.memtable_speed *0.7){
+      TuningOP tea_result = TuneByTEA();
+    
+      if (FEA_enable &&
+          current_score.memtable_speed <= 0.5 * head_score_.memtable_speed) {
+        TuningOP fea_result = TuneByFEA();
+        tea_result.BatchOp = fea_result.BatchOp;
+      }
+    
+      FillUpChangeList(change_list, tea_result);
+    
   }
 }
+
+
+
 SystemScores FEAT_Tuner::normalize(SystemScores &origin_score) {
   // the normlization of flushing speed.
   std::cout << origin_score.flush_speed_avg << ","
@@ -379,10 +387,11 @@ TuningOP FEAT_Tuner::TuneByTEA() {
           bandwidth_congestion_threshold * max_scores.flush_speed_avg) {
         // Flush is too slow
         if (current_score_.flush_numbers != 0 &&
-            current_score_.immutable_number > 1) {
+            current_score_.immutable_number >= 1) {
           // Bandwidth congestion detected!!! Enter the stable Level
           current_stage = kStabilizing;
           result.ThreadOp = kHalf;
+          result.BatchOp = kLinearIncrease;
         }  // In other cases, there's simply no flush jobs have been finished or
            // triggered
       }
@@ -400,20 +409,16 @@ TuningOP FEAT_Tuner::TuneByTEA() {
     } break;
     case kStabilizing: {
       result.ThreadOp = kKeep;
-      if (current_score_.flush_idle_time <= 0.5) {
-        // flushing threads are busy
-        result.ThreadOp = kLinearIncrease;
-      }
-      if (current_score_.compaction_idle_time >= idle_threshold * tuning_gap) {
+      if (current_score_.compaction_idle_time >= idle_threshold) {
         result.ThreadOp = kLinearDecrease;
       }
 
-      if (current_score_.flush_numbers > 0 &&
-          current_score_.flush_idle_time >= idle_threshold * tuning_gap) {
-        result.ThreadOp = kLinearDecrease;
-      }
+//      if (current_score_.flush_numbers > 0 &&
+//          current_score_.flush_idle_time >= idle_threshold * tuning_gap) {
+//        result.ThreadOp = kLinearDecrease;
+//      }
 
-      if (current_score_.estimate_compaction_bytes >= RO_threshold) {
+      if (current_score_.estimate_compaction_bytes > 0.5) {
         result.ThreadOp = kLinearIncrease;
       }
 
@@ -424,7 +429,7 @@ TuningOP FEAT_Tuner::TuneByTEA() {
       }
 
       if (current_score_.flush_speed_avg <=
-          bandwidth_congestion_threshold * max_scores.flush_speed_avg) {
+          0.7 * max_scores.flush_speed_avg) {
         // Flush is too slow
         if (current_score_.flush_numbers != 0 &&
             current_score_.immutable_number > 1) {
@@ -433,20 +438,27 @@ TuningOP FEAT_Tuner::TuneByTEA() {
         }  // In other cases, there's simply no flush jobs have been finished or
            // triggered
       }
-
+      
+      if (recent_ops.end()->ThreadOp == kLinearIncrease || recent_ops.end()->ThreadOp == kDouble){
+        result.BatchOp = kDouble;    
+      
+      }
     } break;
-  }
-  result.BatchOp = kKeep;
+  
 
-  if (current_score_.flush_speed_avg < 1.5 * current_score_.memtable_speed) {
-    if (current_score_.flush_numbers > 0 && current_stage == kStabilizing) {
-      result.BatchOp = kDouble;
-    }
-    if (current_score_.memtable_speed <
-        MO_threshold * head_score_.memtable_speed) {
-      result.ThreadOp = kHalf;
-    }
   }
+//  result.BatchOp = kKeep;
+
+   
+//  if (current_score_.flush_speed_avg < 1.5 * current_score_.memtable_speed) {
+//    if (current_score_.flush_numbers > 0 && current_stage == kStabilizing) {
+//      result.BatchOp = kLinearIncrease;
+//    }
+//    if (current_score_.memtable_speed <
+//        MO_threshold * head_score_.memtable_speed) {
+//      result.ThreadOp = kHalf;
+//    }
+//  }
 
   recent_ops.push_back(result);
 
@@ -459,16 +471,24 @@ TuningOP FEAT_Tuner::TuneByTEA() {
 
   return result;
 }
+
 TuningOP FEAT_Tuner::TuneByFEA() {
   // batch lock associating control knob
   // TBC, Batch Controlling
   TuningOP negative_protocol{kKeep, kKeep};
+  if (current_score_.immutable_number > 1){
+    negative_protocol.BatchOp = kDouble;
+  }
+
   int estimate_no_stall_gap =
       (current_opt.write_buffer_size >> 20) / current_score_.memtable_speed;
+
+  if (current_score_.estimate_compaction_bytes > 0.8) {
+     negative_protocol.BatchOp = kLinearIncrease;
+  }
   if (estimate_no_stall_gap >
       FEA_gap_threshold * current_opt.max_background_jobs / 4) {
-    std::cout << "long gap," << estimate_no_stall_gap << std::endl;
-    negative_protocol.BatchOp = kLinearDecrease;
+    negative_protocol.BatchOp = kHalf;
   }
   return negative_protocol;
 }
