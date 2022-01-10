@@ -258,7 +258,7 @@ class ReporterWithMoreDetails : public ReporterAgent {
     int all_sst_size = 0;
     int immutable_memtables = cfd->imm()->NumNotFlushed();
     for (int i = 0; i < vfs->num_levels(); i++) {
-      all_sst_size += vfs->NumLevelFiles(i);
+      all_sst_size += vfs->NumLevelBytes(i);
     }
 
     std::string report =
