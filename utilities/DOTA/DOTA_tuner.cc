@@ -482,7 +482,7 @@ TuningOP FEAT_Tuner::TuneByFEA() {
       (current_opt.write_buffer_size >> 20) / head_score_.memtable_speed;
 
   if (current_score_.estimate_compaction_bytes > 0.8) {
-     negative_protocol.BatchOp = kLinearIncrease;
+     negative_protocol.BatchOp = kHalf;
   }
   if (estimate_no_stall_gap >
       FEA_gap_threshold * current_opt.max_background_jobs / 4) {
