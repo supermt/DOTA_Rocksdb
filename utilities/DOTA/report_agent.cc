@@ -139,8 +139,8 @@ void ReporterAgentWithTuning::PopChangePoints(int secs_elapsed) {
 }
 
 void ReporterWithMoreDetails::DetectAndTuning(int secs_elapsed) {
-  report_file_->Append(",");
-  ReportLine(secs_elapsed, total_ops_done_);
+//  report_file_->Append(",");
+//  ReportLine(secs_elapsed, total_ops_done_);
   secs_elapsed++;
 }
 };  // namespace ROCKSDB_NAMESPACE
