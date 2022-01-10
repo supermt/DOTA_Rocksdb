@@ -253,9 +253,10 @@ class ReporterWithMoreDetails : public ReporterAgent {
     //    db_ptr->GetIntProperty("rocksdb.cur-size-active-mem-table",
     //    &active_mem);
 
-    uint64_t compaction_pending_bytes = vfs->estimated_compaction_needed_bytes();
-    int live_data_size = vfs->EstimateLiveDataSize();
-    int all_sst_size = 0;
+    uint64_t compaction_pending_bytes =
+        vfs->estimated_compaction_needed_bytes();
+    uint64_t live_data_size = vfs->EstimateLiveDataSize();
+    uint64_t all_sst_size = 0;
     int immutable_memtables = cfd->imm()->NumNotFlushed();
     for (int i = 0; i < vfs->num_levels(); i++) {
       all_sst_size += vfs->NumLevelBytes(i);
