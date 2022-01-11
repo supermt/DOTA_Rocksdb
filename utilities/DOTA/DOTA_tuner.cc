@@ -402,15 +402,15 @@ TuningOP FEAT_Tuner::TuneByFEA() {
     negative_protocol.BatchOp = kDouble;
   }
    
-  uint64_t memtable_size = current_opt.write_buffer_size >> 20; 
-  if (current_score_.memtable_speed + current_score_.active_size_ratio > memtable_size && current_score_.immutable_number == 1){
+  uint64_t cur_memtable_size = current_opt.write_buffer_size >> 20; 
+  if (current_score_.memtable_speed + current_score_.active_size_ratio > cur_memtable_size&& current_score_.immutable_number == 1){
     negative_protocol.BatchOp = kDouble;  
   }
 
   if (current_score_.estimate_compaction_bytes > 0.8) {
      negative_protocol.BatchOp = kLinearDecrease;
   }
-  if (memtable_size / max_scores.flush_speed_avg > FEA_gap_threshold ) {
+  if (cur_memtable_size / max_scores.flush_speed_avg > FEA_gap_threshold ) {
      negative_protocol.BatchOp = kLinearDecrease;
   }
 
