@@ -353,12 +353,11 @@ void FEAT_Tuner::DetectTuningOperations(int /*secs_elapsed*/,
   if (current_score_.memtable_speed < max_scores.memtable_speed *0.7){
       TuningOP tea_result = TuneByTEA();
     
-      if (FEA_enable &&
-          current_score.memtable_speed <= 0.5 * head_score_.memtable_speed) {
+      if (FEA_enable){ 
         TuningOP fea_result = TuneByFEA();
         tea_result.BatchOp = fea_result.BatchOp;
       }
-    
+      std::cout << OpString(tea_result.ThreadOp) << "," << OpString(tea_result.BatchOp) << std::endl; 
       FillUpChangeList(change_list, tea_result);
     
   }
@@ -376,119 +375,54 @@ SystemScores FEAT_Tuner::normalize(SystemScores &origin_score) {
 TuningOP FEAT_Tuner::TuneByTEA() {
   // the flushing speed is low.
   TuningOP result{kKeep, kKeep};
-  switch (current_stage) {
-    case kSlowStart: {
-      result.ThreadOp = kDouble;
-      head_score_ = current_score_;
-      // if MO happens, stop the increment
-      if (current_score_.flush_speed_avg <=
-          bandwidth_congestion_threshold * max_scores.flush_speed_avg) {
-        // Flush is too slow
-        if (current_score_.flush_numbers != 0 &&
-            current_score_.immutable_number >= 1) {
-          // Bandwidth congestion detected!!! Enter the stable Level
-          current_stage = kStabilizing;
-          result.ThreadOp = kHalf;
-          result.BatchOp = kLinearIncrease;
-        }  // In other cases, there's simply no flush jobs have been finished or
-           // triggered
-      }
-      if (current_score_.l0_num >= 1) {
-        result.ThreadOp = kDouble;
-      } else if (current_score_.l0_num >= LO_threshold) {
-        result.ThreadOp = kLinearIncrease;
-      }
-      if (current_score_.compaction_idle_time >= idle_threshold * tuning_gap ||
-          current_score_.flush_idle_time >= idle_threshold * tuning_gap ||
-          current_opt.max_background_jobs >= 0.75 * max_thread) {
-        current_stage = kStabilizing;
-        result.ThreadOp = kLinearDecrease;
-      }
-    } break;
-    case kStabilizing: {
-      result.ThreadOp = kKeep;
-      if (current_score_.compaction_idle_time >= idle_threshold) {
-        result.ThreadOp = kLinearDecrease;
-      }
-
-//      if (current_score_.flush_numbers > 0 &&
-//          current_score_.flush_idle_time >= idle_threshold * tuning_gap) {
-//        result.ThreadOp = kLinearDecrease;
-//      }
-
-      if (current_score_.estimate_compaction_bytes > 0.5) {
-        result.ThreadOp = kLinearIncrease;
-      }
-
-      if (current_score_.l0_num >= 1) {
-        result.ThreadOp = kDouble;
-      } else if (current_score_.l0_num >= LO_threshold) {
-        result.ThreadOp = kLinearIncrease;
-      }
-
-      if (current_score_.flush_speed_avg <=
-          0.7 * max_scores.flush_speed_avg) {
-        // Flush is too slow
-        if (current_score_.flush_numbers != 0 &&
-            current_score_.immutable_number > 1) {
-          // Bandwidth congestion detected!!! Enter the stable Level
-          result.BatchOp = kDouble;
-        }  // In other cases, there's simply no flush jobs have been finished or
-           // triggered
-      }
-      
-      if (recent_ops.end()->ThreadOp == kLinearIncrease || recent_ops.end()->ThreadOp == kDouble){
-        result.BatchOp = kDouble;    
-      
-      }
-    } break;
-  
-
-  }
-//  result.BatchOp = kKeep;
-
-   
-//  if (current_score_.flush_speed_avg < 1.5 * current_score_.memtable_speed) {
-//    if (current_score_.flush_numbers > 0 && current_stage == kStabilizing) {
-//      result.BatchOp = kLinearIncrease;
-//    }
-//    if (current_score_.memtable_speed <
-//        MO_threshold * head_score_.memtable_speed) {
-//      result.ThreadOp = kHalf;
-//    }
-//  }
-
   recent_ops.push_back(result);
-
-//  std::cout << StageString(current_stage) << "," << OpString(result.ThreadOp)
-//            << "," << OpString(result.BatchOp) << ","
-//            << current_opt.max_background_jobs << ","
-//            << (current_opt.write_buffer_size >> 20) << ","
-//            << current_score_.flush_idle_time << ","
-//            << current_score_.compaction_idle_time << std::endl;
+  if (recent_ops.size() > 10){
+    recent_ops.pop_front();
+  }
+  if (current_score_.memtable_speed < max_scores.memtable_speed * 0.7){
+    if (current_score_.immutable_number >=1){
+       if (current_score_.flush_speed_avg <= max_scores.flush_speed_avg * 0.5){
+            if (current_opt.max_background_jobs > 6){
+                result.ThreadOp = kHalf;
+            }else{
+                result.ThreadOp = kLinearIncrease;
+            }
+       }else if (current_score_.estimate_compaction_bytes > 0.5){
+            result.ThreadOp = kLinearIncrease; 
+       } 
+    }
+   
+  }else if (current_score_.compaction_idle_time > idle_threshold){
+    result.ThreadOp =  kLinearDecrease;
+  }
 
   return result;
 }
 
 TuningOP FEAT_Tuner::TuneByFEA() {
-  // batch lock associating control knob
-  // TBC, Batch Controlling
-  TuningOP negative_protocol{kKeep, kKeep};
-  if (current_score_.immutable_number > 1){
+ TuningOP negative_protocol{kKeep, kKeep};
+  if (current_score_.immutable_number >= 1){
     negative_protocol.BatchOp = kDouble;
   }
 
-  int estimate_no_stall_gap =
-      (current_opt.write_buffer_size >> 20) / head_score_.memtable_speed;
-
   if (current_score_.estimate_compaction_bytes > 0.8) {
-     negative_protocol.BatchOp = kHalf;
+     negative_protocol.BatchOp = kLinearDecrease;
   }
-  if (estimate_no_stall_gap >
-      FEA_gap_threshold * current_opt.max_background_jobs / 4) {
-    negative_protocol.BatchOp = kHalf;
+
+  int flush_gap = 0;
+  std::cout << scores.size() << std::endl;
+  if (scores.size() >= 10){
+    for (int i = scores.size();i>1;i--){
+       if (scores[i].flush_speed_avg == 0) flush_gap++;
+       if (scores[i].flush_speed_avg>0) break; 
+    }
+    std::cout << "current flush gap is:" << flush_gap << std::endl;
   }
-  return negative_protocol;
+  FEA_gap_threshold=2; 
+  if (flush_gap > 2) {
+    negative_protocol.BatchOp = kHalf; 
+  }
+ return negative_protocol;
 }
 
 }  // namespace ROCKSDB_NAMESPACE
