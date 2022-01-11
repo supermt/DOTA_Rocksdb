@@ -379,7 +379,7 @@ TuningOP FEAT_Tuner::TuneByTEA() {
   if (recent_ops.size() > 10){
     recent_ops.pop_front();
   }
-  if (current_score_.memtable_speed < max_scores.memtable_speed * 0.7){
+  if (current_score_.memtable_speed < max_scores.memtable_speed * 0.5){
     if (current_score_.immutable_number >=1){
        if (current_score_.flush_speed_avg <= max_scores.flush_speed_avg * 0.5){
             if (current_opt.max_background_jobs > 6){
@@ -409,18 +409,10 @@ TuningOP FEAT_Tuner::TuneByFEA() {
      negative_protocol.BatchOp = kLinearDecrease;
   }
 
-  int flush_gap = 0;
-  std::cout << scores.size() << std::endl;
-  if (scores.size() >= 10){
-    for (int i = scores.size();i>1;i--){
-       if (scores[i].flush_speed_avg == 0) flush_gap++;
-       if (scores[i].flush_speed_avg>0) break; 
-    }
-    std::cout << "current flush gap is:" << flush_gap << std::endl;
-  }
-  FEA_gap_threshold=2; 
-  if (flush_gap > 2) {
-    negative_protocol.BatchOp = kHalf; 
+  float esitmate_gap = current_score_.active_size_ratio * (current_opt.write_buffer_size>>20) / current_score_.memtable_speed;
+
+  if (esitmate_gap > FEA_gap_threshold) {
+    negative_protocol.BatchOp = kLinearDecrease; 
   }
  return negative_protocol;
 }
