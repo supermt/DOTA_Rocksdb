@@ -82,6 +82,7 @@ SystemScores DOTA_Tuner::ScoreTheSystem() {
   running_db_->GetIntProperty("rocksdb.cur-size-active-mem-table", &active_mem);
 
   current_score.active_size_ratio = (double)(active_mem >> 20);
+  current_score.active_size_ratio /= (current_opt.write_buffer_size >> 20);
   current_score.immutable_number = cfd->imm()->NumNotFlushed();
 
   std::vector<FlushMetrics> flush_metric_list;
@@ -127,7 +128,6 @@ SystemScores DOTA_Tuner::ScoreTheSystem() {
 
     current_score.disk_bandwidth += temp.total_bytes;
   }
-
   // flush_speed_avg,flush_speed_var,l0_drop_ratio
   if (num_new_flushes != 0) {
     current_score.flush_speed_avg /= num_new_flushes;
@@ -329,8 +329,10 @@ void FEAT_Tuner::DetectTuningOperations(int /*secs_elapsed*/,
   //   first, we tune only when the flushing speed is slower than before
   //  UpdateSystemStats();
   auto current_score = this->ScoreTheSystem();
-  scores.push_back(current_score);
-  if (scores.size() == 1) {
+  if (current_score.flush_speed_avg != 0 ) {
+    scores.push_back(current_score);
+  }
+  if (scores.size() <= 1) {
     return;
   }
   this->UpdateMaxScore(current_score);
@@ -349,18 +351,13 @@ void FEAT_Tuner::DetectTuningOperations(int /*secs_elapsed*/,
 //    // Flush speed can be 0 for there's no enough data.
 //    return;
 //  }
-  current_score_ = current_score;
-  if (current_score_.memtable_speed < max_scores.memtable_speed *0.7){
+      current_score_ = current_score;
       TuningOP tea_result = TuneByTEA();
     
-      if (FEA_enable){ 
-        TuningOP fea_result = TuneByFEA();
-        tea_result.BatchOp = fea_result.BatchOp;
-      }
+      
       std::cout << OpString(tea_result.ThreadOp) << "," << OpString(tea_result.BatchOp) << std::endl; 
       FillUpChangeList(change_list, tea_result);
     
-  }
 }
 
 
@@ -378,19 +375,19 @@ TuningOP FEAT_Tuner::TuneByTEA() {
  if (recent_ops.size() > 10){
     recent_ops.pop_front();
   }
-  if (current_score_.memtable_speed < max_scores.memtable_speed * 0.5){  
-      if (current_score_.l0_num > 0.8) result.ThreadOp = kDouble;
-      if (current_score_.immutable_number >=1){
-       if (current_score_.flush_speed_avg <= max_scores.flush_speed_avg * 0.5){
-           result.ThreadOp = kHalf;
-       }else if (current_score_.estimate_compaction_bytes > 0.5){
-            result.ThreadOp = kLinearIncrease; 
-       } 
+
+  // if (scores.back().flush_speed_avg == 0) return result;
+//  std::cout << "flush speed" << scores.back().flush_speed_avg <<std::endl;
+  if (current_score_.memtable_speed > (scores.back().flush_speed_avg * (1.0-current_score_.active_size_ratio)) && current_score_.immutable_number >= 1){
+          result.BatchOp = kLinearIncrease;
     }
-   
-  }else if (current_score_.compaction_idle_time > idle_threshold){
-    result.ThreadOp =  kLinearDecrease;
+  if (current_score_.l0_num > 0.8) result.ThreadOp = kLinearIncrease;
+  if (current_score_.compaction_idle_time >  idle_threshold){
+    result.ThreadOp =  kHalf;
+  }else if (current_score_.estimate_compaction_bytes > 0.5 * current_opt.soft_pending_compaction_bytes_limit){
+    result.BatchOp = kHalf;
   }
+
   recent_ops.push_back(result);
  
   return result;
@@ -398,29 +395,6 @@ TuningOP FEAT_Tuner::TuneByTEA() {
 
 TuningOP FEAT_Tuner::TuneByFEA() {
  TuningOP negative_protocol{kKeep, kKeep};
-  if (current_score_.immutable_number > 1){
-    negative_protocol.BatchOp = kDouble;
-  }
-   
-  uint64_t cur_memtable_size = current_opt.write_buffer_size >> 20; 
-  if (current_score_.memtable_speed + current_score_.active_size_ratio > cur_memtable_size&& current_score_.immutable_number == 1){
-    negative_protocol.BatchOp = kDouble;  
-  }
-
-  if (current_score_.estimate_compaction_bytes > 0.8) {
-     negative_protocol.BatchOp = kLinearDecrease;
-  }
-  if (cur_memtable_size / max_scores.flush_speed_avg > FEA_gap_threshold ) {
-     negative_protocol.BatchOp = kLinearDecrease;
-  }
-
-
-
-//  float esitmate_gap = current_score_.active_size_ratio * (current_opt.write_buffer_size>>20) / current_score_.memtable_speed;
-
-//  if (esitmate_gap > FEA_gap_threshold) {
-//    negative_protocol.BatchOp = kLinearDecrease; 
-//  }
  return negative_protocol;
 }
 
