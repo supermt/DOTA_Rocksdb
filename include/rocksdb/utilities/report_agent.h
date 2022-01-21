@@ -218,8 +218,8 @@ class ReporterWithMoreDetails : public ReporterAgent {
  private:
   DBImpl* db_ptr;
   std::string detailed_header() {
-    return ReporterAgent::Header() + ",immutables" + ",total_mem_size" +
-           ",l0_files" + ",all_sst_size" + ",live_data_size" + ",pending_bytes";
+    return ReporterAgent::Header() + ",total_mem_size" +
+           ",l0_files" + ",pending_bytes";
   }
 
  public:
@@ -244,7 +244,7 @@ class ReporterWithMoreDetails : public ReporterAgent {
     //    current_opt = db_ptr->GetOptions();
     auto version =
         db_ptr->GetVersionSet()->GetColumnFamilySet()->GetDefault()->current();
-    auto cfd = version->cfd();
+//    auto cfd = version->cfd();
     auto vfs = version->storage_info();
     int l0_files = vfs->NumLevelFiles(0);
     uint64_t total_mem_size = 0;
@@ -255,20 +255,24 @@ class ReporterWithMoreDetails : public ReporterAgent {
 
     uint64_t compaction_pending_bytes =
         vfs->estimated_compaction_needed_bytes();
-    uint64_t live_data_size = vfs->EstimateLiveDataSize();
-    uint64_t all_sst_size = 0;
-    int immutable_memtables = cfd->imm()->NumNotFlushed();
-    for (int i = 0; i < vfs->num_levels(); i++) {
-      all_sst_size += vfs->NumLevelBytes(i);
-    }
+//    uint64_t live_data_size = vfs->EstimateLiveDataSize();
 
+//     int immutable_memtables = cfd->imm()->NumNotFlushed();
+    //    uint64_t all_sst_size = 0;
+//    for (int i = 0; i < vfs->num_levels(); i++) {
+//      all_sst_size += vfs->NumLevelBytes(i);
+//    }
+//
     std::string report =
         ToString(secs_elapsed) + "," +
         ToString(total_ops_done_snapshot - last_report_) + "," +
-        ToString(immutable_memtables) + "," + ToString(total_mem_size) + "," +
-        ToString(l0_files) + "," + ToString(all_sst_size) + "," +
-        ToString(live_data_size) + "," + ToString(compaction_pending_bytes);
-    //    std::cout << report << std::endl;
+//        ToString(immutable_memtables) + "," +
+        ToString(total_mem_size) + "," +
+        ToString(l0_files) + "," + 
+        //ToString(all_sst_size) + "," +
+//        ToString(live_data_size) + "," + 
+        ToString(compaction_pending_bytes);
+//        std::cout << report << std::endl;
     auto s = report_file_->Append(report);
     return s;
   }
