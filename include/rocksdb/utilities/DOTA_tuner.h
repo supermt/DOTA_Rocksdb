@@ -248,16 +248,21 @@ class FEAT_Tuner : public DOTA_Tuner {
  public:
   FEAT_Tuner(const Options opt, DBImpl* running_db, int64_t* last_report_op_ptr,
              std::atomic<int64_t>* total_ops_done_ptr, Env* env, int gap_sec,
+             bool triggerTEA,
              bool triggerFEA)
       : DOTA_Tuner(opt, running_db, last_report_op_ptr, total_ops_done_ptr, env,
                    gap_sec),
+        TEA_enable(triggerTEA),
         FEA_enable(triggerFEA),
         current_stage(kSlowStart) {
     flush_list_from_opt_ptr =
         this->running_db_->immutable_db_options().flush_stats;
 
-    std::cout << "Using FEAT tuner, FEA is "
+    std::cout << "Using FEAT tuner.\n FEA is "
               << (FEA_enable ? "triggered" : "NOT triggered") << std::endl;
+    std::cout << "TEA is "
+              << (TEA_enable ? "triggered" : "NOT triggered") << std::endl;
+
   }
   void DetectTuningOperations(int secs_elapsed,
                               std::vector<ChangePoint>* change_list) override;
@@ -267,6 +272,7 @@ class FEAT_Tuner : public DOTA_Tuner {
   TuningOP TuneByFEA();
 
  private:
+  bool TEA_enable;
   bool FEA_enable;
   SystemScores current_score_;
   SystemScores head_score_;

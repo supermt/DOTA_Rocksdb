@@ -59,11 +59,11 @@ Status ReporterAgentWithTuning::ReportLine(int secs_elapsed,
   auto s = report_file_->Append(report);
   return s;
 }
-void ReporterAgentWithTuning::UseFEATTuner(bool FEA_enable) {
+void ReporterAgentWithTuning::UseFEATTuner(bool TEA_enable, bool FEA_enable) {
   tuner.release();
   tuner.reset(new FEAT_Tuner(options_when_boost, running_db_, &last_report_,
                              &total_ops_done_, env_, tuning_gap_secs_,
-                             FEA_enable));
+                             TEA_enable ,FEA_enable));
 };
 void ReporterAgentWithTuning::ApplyChangePointsInstantly(
     std::vector<ChangePoint>* points) {

@@ -3532,7 +3532,7 @@ class Benchmark {
         }
         auto tuner_agent =
             reinterpret_cast<ReporterAgentWithTuning*>(reporter_agent.get());
-        tuner_agent->UseFEATTuner(FLAGS_FEA_enable);
+        tuner_agent->UseFEATTuner(FLAGS_TEA_enable,FLAGS_FEA_enable);
         tuner_agent->GetTuner()->set_idle_ratio(FLAGS_idle_rate);
         tuner_agent->GetTuner()->set_gap_threshold(FLAGS_FEA_gap_threshold);
 

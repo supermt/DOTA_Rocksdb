@@ -167,7 +167,7 @@ class ReporterAgentWithTuning : public ReporterAgent {
   }
 
   Status ReportLine(int secs_elapsed, int total_ops_done_snapshot) override;
-  void UseFEATTuner(bool FEA_enable);
+  void UseFEATTuner(bool TEA_enable,bool FEA_enable);
   //  void print_useless_thing(int secs_elapsed);
   void DetectAndTuning(int secs_elapsed) override;
   enum CongestionStatus {
