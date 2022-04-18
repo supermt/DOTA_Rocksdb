@@ -1888,6 +1888,7 @@ enum OperationType : unsigned char {
   kSeek,
   kMerge,
   kUpdate,
+  kReadModifyWrite,
   kCompress,
   kUncompress,
   kCrc,
@@ -1898,7 +1899,7 @@ enum OperationType : unsigned char {
 static std::unordered_map<OperationType, std::string, std::hash<unsigned char>>
     OperationTypeString = {{kRead, "read"},         {kWrite, "write"},
                            {kDelete, "delete"},     {kSeek, "seek"},
-                           {kMerge, "merge"},       {kUpdate, "update"},
+                           {kMerge, "merge"},       {kUpdate, "update"},{kReadModifyWrite,"read-modify-write"},
                            {kCompress, "compress"}, {kCompress, "uncompress"},
                            {kCrc, "crc"},           {kHash, "hash"},
                            {kOthers, "op"}};
@@ -3116,7 +3117,7 @@ class Benchmark {
         fresh_db = true;
         method = &Benchmark::YCSBLoader;
       } else if (name == "ycsb_run") {
-        fresh_db = true;
+        fresh_db = false;
         method = &Benchmark::YCSBRunner;
       } else if (name == "filluniquerandom") {
         fresh_db = true;
@@ -4798,7 +4799,7 @@ class Benchmark {
             }
             Slice val = gen.Generate();
             op_status = db_.db->Put(w_op, key, val);
-            thread->stats.FinishedOps(nullptr, db, entries_per_batch_, kUpdate);
+            thread->stats.FinishedOps(nullptr, db, entries_per_batch_, kReadModifyWrite);
           } break;
           case ycsbc::DELETE: {
             op_status = db_.db->Delete(w_op, key);
