@@ -643,8 +643,10 @@ DEFINE_bool(TEA_enable, false, "Trigger FEAT tuner's TEA component");
 DEFINE_double(idle_rate, 2.5,
               "TEA will decide this as the idle rate of the threads");
 DEFINE_double(FEA_gap_threshold, 1, "The negative feedback loop's threshold");
+DEFINE_double(TEA_slow_flush, 0.5, "The negative feedback loop's threshold");
+DEFINE_double(DOTA_tuning_gap, 1.0, "Tuning gap of the DOTA agent, in secs ");
+
 DEFINE_bool(Funnel_enable, false, "Use Funnel shape model");
-DEFINE_int64(DOTA_tuning_gap, 1, "Tuning gap of the DOTA agent, in secs ");
 DEFINE_bool(mutable_compaction_thread_prior, false,
             "trigger multi_level compaction prior");
 DEFINE_bool(detailed_running_stats, false,
@@ -3536,6 +3538,7 @@ class Benchmark {
         tuner_agent->UseFEATTuner(FLAGS_TEA_enable,FLAGS_FEA_enable);
         tuner_agent->GetTuner()->set_idle_ratio(FLAGS_idle_rate);
         tuner_agent->GetTuner()->set_gap_threshold(FLAGS_FEA_gap_threshold);
+        tuner_agent->GetTuner()->set_slow_flush_threshold(FLAGS_TEA_slow_flush);
 
         for (auto point : config_change_points) {
           reporter_agent->InsertNewTuningPoints(point);

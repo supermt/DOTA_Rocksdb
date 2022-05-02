@@ -113,7 +113,6 @@ SystemScores DOTA_Tuner::ScoreTheSystem() {
       tuning_gap;
   current_score.memtable_speed /= kMicrosInSecond;  // we use MiB to calculate
   last_unflushed_bytes = total_mem_size;
-  //  std::cout << current_score.flush_numbers << std::endl;
   uint64_t max_pending_bytes = 0;
   for (uint64_t i = compaction_list_accessed; i < compaction_result_length;
        i++) {
@@ -184,7 +183,6 @@ void DOTA_Tuner::AdjustmentTuning(std::vector<ChangePoint> *change_list,
                                   SystemScores &score,
                                   ThreadStallLevels thread_levels,
                                   BatchSizeStallLevels batch_levels) {
-  //  std::cout << thread_levels << " " << batch_levels << std::endl;
   // tune for thread number
   auto tuning_op = VoteForOP(score, thread_levels, batch_levels);
   // tune for memtable
@@ -372,8 +370,6 @@ void FEAT_Tuner::DetectTuningOperations(int /*secs_elapsed*/,
 
 SystemScores FEAT_Tuner::normalize(SystemScores &origin_score) {
   // the normlization of flushing speed.
-  std::cout << origin_score.flush_speed_avg << ","
-            << origin_score.memtable_speed << std::endl;
 //  origin_score.flush_speed_avg /= origin_score.memtable_speed;
   return origin_score;
 }
@@ -396,7 +392,7 @@ TuningOP FEAT_Tuner::TuneByTEA() {
   }else if (current_score_.estimate_compaction_bytes > 0.8){
             result.ThreadOp = kLinearIncrease; 
   }
-  else if (current_score_.compaction_idle_time > idle_threshold){
+  else if (current_score_.compaction_idle_time > idle_threshold * tuning_gap){
     result.ThreadOp =  kLinearDecrease;
   }
 
@@ -408,7 +404,7 @@ TuningOP FEAT_Tuner::TuneByFEA() {
 
   float esitmate_gap = current_score_.active_size_ratio * (current_opt.write_buffer_size>>20) / current_score_.memtable_speed;
 
-  if (esitmate_gap > FEA_gap_threshold) {
+  if (esitmate_gap > FEA_gap_threshold * tuning_gap) {
     negative_protocol.BatchOp = kLinearDecrease; 
   }
   if (current_score_.immutable_number > 1){

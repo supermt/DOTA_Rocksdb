@@ -138,7 +138,7 @@ class ReporterAgentWithTuning : public ReporterAgent {
   static std::string DOTAHeader() {
     return "secs_elapsed,interval_qps,batch_size,thread_num";
   }
-  uint64_t tuning_gap_secs_;
+  int tuning_gap_secs_;
   std::map<std::string, std::string> parameter_map;
   std::map<std::string, int> baseline_map;
   const int thread_num_upper_bound = 12;

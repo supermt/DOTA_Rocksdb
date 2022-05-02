@@ -109,17 +109,18 @@ class DOTA_Tuner {
   uint64_t last_flush_thread_len;
   uint64_t last_compaction_thread_len;
   Env* env_;
-  int tuning_gap;
+  double tuning_gap;
   int double_ratio = 2;
   uint64_t last_unflushed_bytes = 0;
   const static int score_array_len = 10;
   double idle_threshold = 2.5;
   double FEA_gap_threshold = 1;
+  double TEA_slow_flush = 0.5;
   void UpdateSystemStats() { UpdateSystemStats(running_db_); }
 
  public:
   DOTA_Tuner(const Options opt, DBImpl* running_db, int64_t* last_report_op_ptr,
-             std::atomic<int64_t>* total_ops_done_ptr, Env* env, int gap_sec)
+             std::atomic<int64_t>* total_ops_done_ptr, Env* env, uint64_t gap_sec)
       : default_opts(opt),
         tuning_rounds(0),
         running_db_(running_db),
@@ -147,6 +148,9 @@ class DOTA_Tuner {
   void set_idle_ratio(double idle_ra) { idle_threshold = idle_ra; }
   void set_gap_threshold(double ng_threshold) {
     FEA_gap_threshold = ng_threshold;
+  }
+  void set_slow_flush_threshold(double sf_threshold){
+    this->TEA_slow_flush = sf_threshold;
   }
   virtual ~DOTA_Tuner();
 
