@@ -32,6 +32,7 @@ struct SystemScores;
 
 class ReporterWithMoreDetails;
 class ReporterAgentWithTuning;
+class ReporterAgentWithSILK;
 
 class ReporterAgent {
  private:
@@ -125,6 +126,21 @@ class ReporterAgent {
   }
 };
 
+class ReporterAgentWithSILK : public ReporterAgent {
+ private:
+  bool pausedcompaction = false;
+  long prev_bandwidth_compaction_MBPS = 0;
+  int FLAGS_value_size = 1000;
+  int FLAGS_SILK_bandwidth_limitation = 350;
+  DBImpl* running_db_;
+
+ public:
+  ReporterAgentWithSILK(DBImpl* running_db, Env* env, const std::string& fname,
+                        uint64_t report_interval_secs, int32_t FLAGS_value_size,
+                        int32_t bandwidth_limitation);
+  Status ReportLine(int secs_elapsed, int total_ops_done_snapshot) override;
+};
+
 class ReporterAgentWithTuning : public ReporterAgent {
  private:
   std::vector<ChangePoint> tuning_points;
@@ -167,7 +183,7 @@ class ReporterAgentWithTuning : public ReporterAgent {
   }
 
   Status ReportLine(int secs_elapsed, int total_ops_done_snapshot) override;
-  void UseFEATTuner(bool TEA_enable,bool FEA_enable);
+  void UseFEATTuner(bool TEA_enable, bool FEA_enable);
   //  void print_useless_thing(int secs_elapsed);
   void DetectAndTuning(int secs_elapsed) override;
   enum CongestionStatus {

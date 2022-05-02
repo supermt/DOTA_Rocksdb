@@ -640,6 +640,7 @@ DEFINE_int64(max_memtable_size, ROCKSDB_NAMESPACE::Options().max_memtable_size,
 DEFINE_bool(DOTA_enabled, false, "Whether trigger the DOTA framework");
 DEFINE_bool(FEA_enable, false, "Trigger FEAT tuner's FEA component");
 DEFINE_bool(TEA_enable, false, "Trigger FEAT tuner's TEA component");
+DEFINE_int32(SILK_bandwidth_limitation, 200, "MBPS of disk limitation");
 DEFINE_double(idle_rate, 2.5,
               "TEA will decide this as the idle rate of the threads");
 DEFINE_double(FEA_gap_threshold, 1, "The negative feedback loop's threshold");
@@ -651,6 +652,7 @@ DEFINE_bool(mutable_compaction_thread_prior, false,
             "trigger multi_level compaction prior");
 DEFINE_bool(detailed_running_stats, false,
             "Whether record more detailed information in report agent");
+DEFINE_bool(SILK_triggered, false, "Whether the SILK tuner is triggered");
 DEFINE_int64(quicksand_fold_num, 4,
              "folded times of the target benchmark for better quicksand effect "
              "observation");
@@ -1899,11 +1901,17 @@ enum OperationType : unsigned char {
 };
 
 static std::unordered_map<OperationType, std::string, std::hash<unsigned char>>
-    OperationTypeString = {{kRead, "read"},         {kWrite, "write"},
-                           {kDelete, "delete"},     {kSeek, "seek"},
-                           {kMerge, "merge"},       {kUpdate, "update"},{kReadModifyWrite,"read-modify-write"},
-                           {kCompress, "compress"}, {kCompress, "uncompress"},
-                           {kCrc, "crc"},           {kHash, "hash"},
+    OperationTypeString = {{kRead, "read"},
+                           {kWrite, "write"},
+                           {kDelete, "delete"},
+                           {kSeek, "seek"},
+                           {kMerge, "merge"},
+                           {kUpdate, "update"},
+                           {kReadModifyWrite, "read-modify-write"},
+                           {kCompress, "compress"},
+                           {kCompress, "uncompress"},
+                           {kCrc, "crc"},
+                           {kHash, "hash"},
                            {kOthers, "op"}};
 
 class CombinedStats;
@@ -3535,7 +3543,7 @@ class Benchmark {
         }
         auto tuner_agent =
             reinterpret_cast<ReporterAgentWithTuning*>(reporter_agent.get());
-        tuner_agent->UseFEATTuner(FLAGS_TEA_enable,FLAGS_FEA_enable);
+        tuner_agent->UseFEATTuner(FLAGS_TEA_enable, FLAGS_FEA_enable);
         tuner_agent->GetTuner()->set_idle_ratio(FLAGS_idle_rate);
         tuner_agent->GetTuner()->set_gap_threshold(FLAGS_FEA_gap_threshold);
         tuner_agent->GetTuner()->set_slow_flush_threshold(FLAGS_TEA_slow_flush);
@@ -3547,6 +3555,11 @@ class Benchmark {
         reporter_agent.reset(new ReporterWithMoreDetails(
             reinterpret_cast<DBImpl*>(db_.db), FLAGS_env, FLAGS_report_file,
             FLAGS_report_interval_seconds));
+      } else if (FLAGS_SILK_triggered) {
+        reporter_agent.reset(new ReporterAgentWithSILK(
+            reinterpret_cast<DBImpl*>(db_.db), FLAGS_env, FLAGS_report_file,
+            FLAGS_report_interval_seconds, FLAGS_value_size,
+            FLAGS_SILK_bandwidth_limitation));
       } else {
         reporter_agent.reset(new ReporterAgent(FLAGS_env, FLAGS_report_file,
                                                FLAGS_report_interval_seconds));
@@ -4297,7 +4310,7 @@ class Benchmark {
       FLAGS_benchmark_write_rate_limit = static_cast<uint64_t>(SineRate(0));
     }
 
-    if (FLAGS_rate_limiter_bytes_per_sec > 0) {
+    if (FLAGS_rate_limiter_bytes_per_sec > 0 || FLAGS_SILK_triggered) {
       if (FLAGS_rate_limit_bg_reads &&
           !FLAGS_new_table_reader_for_compaction_inputs) {
         fprintf(stderr,
@@ -4305,6 +4318,11 @@ class Benchmark {
                 "new_table_reader_for_compaction_inputs set\n");
         exit(1);
       }
+
+      FLAGS_rate_limiter_bytes_per_sec =
+          FLAGS_rate_limiter_bytes_per_sec == 0
+              ? FLAGS_SILK_bandwidth_limitation * 1000 * 1000
+              : FLAGS_rate_limiter_bytes_per_sec;  // bandwidth, MB/s to Bytes/s
       options.rate_limiter.reset(NewGenericRateLimiter(
           FLAGS_rate_limiter_bytes_per_sec, 100 * 1000 /* refill_period_us */,
           10 /* fairness */,
@@ -4802,7 +4820,8 @@ class Benchmark {
             }
             Slice val = gen.Generate();
             op_status = db_.db->Put(w_op, key, val);
-            thread->stats.FinishedOps(nullptr, db, entries_per_batch_, kReadModifyWrite);
+            thread->stats.FinishedOps(nullptr, db, entries_per_batch_,
+                                      kReadModifyWrite);
           } break;
           case ycsbc::DELETE: {
             op_status = db_.db->Delete(w_op, key);

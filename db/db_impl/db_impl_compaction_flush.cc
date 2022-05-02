@@ -6,11 +6,11 @@
 // Copyright (c) 2011 The LevelDB Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file. See the AUTHORS file for names of contributors.
-#include "db/db_impl/db_impl.h"
-
 #include <cinttypes>
+#include <iostream>
 
 #include "db/builder.h"
+#include "db/db_impl/db_impl.h"
 #include "db/error_handler.h"
 #include "db/event_helpers.h"
 #include "file/sst_file_manager_impl.h"
@@ -1946,6 +1946,34 @@ void DBImpl::EnableManualCompaction() {
   manual_compaction_paused_.store(false, std::memory_order_release);
 }
 
+Status DBImpl::PauseCompactionWork() {
+  // Copy from SILK, https://github.com/theoanab/SILK-USENIXATC2019
+  std::cout << "Stopping the compaction work" << std::endl;
+  printf(" ->>>>??? Pausing compaction from DB\n");
+  InstrumentedMutexLock guard_lock(&mutex_);
+  bg_compaction_paused_++;
+  while (bg_compaction_scheduled_ > 0) {
+    bg_cv_.Wait();
+  }
+  bg_compaction_paused_++;
+  return Status::OK();
+}
+Status DBImpl::ContinueCompactionWork() {
+  printf(" ->>>>??? Resuming compaction from DB\n");
+  InstrumentedMutexLock guard_lock(&mutex_);
+  if (bg_compaction_paused_ == 0) {
+    return Status::InvalidArgument();
+  }
+  assert(bg_compaction_paused_ > 0);
+  bg_compaction_paused_--;
+  // It's sufficient to check just bg_work_paused_ here since
+  // bg_work_paused_ is always no greater than bg_compaction_paused_
+  if (bg_compaction_paused_ == 0) {
+    MaybeScheduleFlushOrCompaction();
+  }
+  return Status::OK();
+}
+
 void DBImpl::MaybeScheduleFlushOrCompaction() {
   mutex_.AssertHeld();
   if (!opened_successfully_) {
@@ -2544,12 +2572,13 @@ Status DBImpl::BackgroundCompaction(bool* made_progress,
     if (!c) {
       m->done = true;
       m->manual_end = nullptr;
-      ROCKS_LOG_BUFFER(log_buffer,
-                       "[%s] Manual compaction from level-%d from %s .. "
-                       "%s; nothing to do\n",
-                       m->cfd->GetName().c_str(), m->input_level,
-                       (m->begin ? m->begin->DebugString(true).c_str() : "(begin)"),
-                       (m->end ? m->end->DebugString(true).c_str() : "(end)"));
+      ROCKS_LOG_BUFFER(
+          log_buffer,
+          "[%s] Manual compaction from level-%d from %s .. "
+          "%s; nothing to do\n",
+          m->cfd->GetName().c_str(), m->input_level,
+          (m->begin ? m->begin->DebugString(true).c_str() : "(begin)"),
+          (m->end ? m->end->DebugString(true).c_str() : "(end)"));
     } else {
       // First check if we have enough room to do the compaction
       bool enough_room = EnoughRoomForCompaction(

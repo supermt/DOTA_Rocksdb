@@ -308,6 +308,9 @@ class DBImpl : public DB {
   virtual void EnableManualCompaction() override;
   virtual void DisableManualCompaction() override;
 
+  Status PauseCompactionWork();
+  Status ContinueCompactionWork();
+  
   using DB::SetOptions;
   Status SetOptions(
       ColumnFamilyHandle* column_family,

@@ -63,7 +63,7 @@ void ReporterAgentWithTuning::UseFEATTuner(bool TEA_enable, bool FEA_enable) {
   tuner.release();
   tuner.reset(new FEAT_Tuner(options_when_boost, running_db_, &last_report_,
                              &total_ops_done_, env_, tuning_gap_secs_,
-                             TEA_enable ,FEA_enable));
+                             TEA_enable, FEA_enable));
 };
 void ReporterAgentWithTuning::ApplyChangePointsInstantly(
     std::vector<ChangePoint>* points) {
@@ -139,8 +139,64 @@ void ReporterAgentWithTuning::PopChangePoints(int secs_elapsed) {
 }
 
 void ReporterWithMoreDetails::DetectAndTuning(int secs_elapsed) {
-//  report_file_->Append(",");
-//  ReportLine(secs_elapsed, total_ops_done_);
+  //  report_file_->Append(",");
+  //  ReportLine(secs_elapsed, total_ops_done_);
   secs_elapsed++;
 }
+
+Status ReporterAgentWithSILK::ReportLine(int secs_elapsed,
+                                         int total_ops_done_snapshot) {
+  // copy from SILK https://github.com/theoanab/SILK-USENIXATC2019
+
+  // //check the current bandwidth for user operations
+  long cur_throughput = (total_ops_done_snapshot - last_report_);
+  long cur_bandwidth_user_ops_MBPS =
+      cur_throughput * FLAGS_value_size / 1000000;
+
+//  // SILK TESTING the Pause compaction work functionality
+//  if (!pausedcompaction && cur_bandwidth_user_ops_MBPS > 150) {
+//    // SILK Consider this a load peak
+//    printf("->>>>??? Pausing compaction work from SILK\n");
+//    running_db_->PauseCompactionWork();
+//    pausedcompaction = true;
+//  } else if (pausedcompaction && cur_bandwidth_user_ops_MBPS <= 150) {
+//    printf("->>>>??? Resuming compaction work from SILK\n");
+//    running_db_->ContinueCompactionWork();
+//    pausedcompaction = false;
+//  }
+
+  long cur_bandiwdth_compaction_MBPS =
+      FLAGS_SILK_bandwidth_limitation -
+      cur_bandwidth_user_ops_MBPS;  // measured 200MB/s SSD bandwidth on XEON.
+  if (cur_bandiwdth_compaction_MBPS < 10) {
+    cur_bandiwdth_compaction_MBPS = 10;
+  }
+
+  if (abs(prev_bandwidth_compaction_MBPS - cur_bandiwdth_compaction_MBPS) >=
+      10) {
+    auto opt = running_db_->GetOptions();
+    opt.rate_limiter.get()->SetBytesPerSecond(cur_bandiwdth_compaction_MBPS *
+                                              1000 * 1000);
+    prev_bandwidth_compaction_MBPS = cur_bandiwdth_compaction_MBPS;
+  }
+
+  // Adjust the tuner from SILK before reporting
+  std::string report = ToString(secs_elapsed) + "," +
+                       ToString(total_ops_done_snapshot - last_report_);
+  auto s = report_file_->Append(report);
+  return s;
+}
+ReporterAgentWithSILK::ReporterAgentWithSILK(DBImpl* running_db, Env* env,
+                                             const std::string& fname,
+                                             uint64_t report_interval_secs,
+                                             int32_t value_size,
+                                             int32_t bandwidth_limitation)
+    : ReporterAgent(env, fname, report_interval_secs) {
+  std::cout << "SILK enabled, Disk bandwidth has been set to: "
+            << bandwidth_limitation << std::endl;
+  running_db_ = running_db;
+  this->FLAGS_value_size = value_size;
+  this->FLAGS_SILK_bandwidth_limitation = bandwidth_limitation;
+}
+
 };  // namespace ROCKSDB_NAMESPACE
