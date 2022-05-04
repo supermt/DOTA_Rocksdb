@@ -170,7 +170,9 @@ class DOTA_Tuner {
     if (current_score.immutable_number > max_scores.immutable_number) {
       max_scores.immutable_number = current_score.immutable_number;
     }
-    if (current_score.flush_speed_avg > max_scores.flush_speed_avg) {
+
+    if (0 == max_scores.flush_speed_avg) {
+    //    if (current_score.flush_speed_avg > max_scores.flush_speed_avg) {
       max_scores.flush_speed_avg = current_score.flush_speed_avg;
     }
     if (current_score.flush_speed_var > max_scores.flush_speed_var) {
