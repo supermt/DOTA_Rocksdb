@@ -153,17 +153,17 @@ Status ReporterAgentWithSILK::ReportLine(int secs_elapsed,
   long cur_bandwidth_user_ops_MBPS =
       cur_throughput * FLAGS_value_size / 1000000;
 
-//  // SILK TESTING the Pause compaction work functionality
-//  if (!pausedcompaction && cur_bandwidth_user_ops_MBPS > 150) {
-//    // SILK Consider this a load peak
-//    printf("->>>>??? Pausing compaction work from SILK\n");
-//    running_db_->PauseCompactionWork();
-//    pausedcompaction = true;
-//  } else if (pausedcompaction && cur_bandwidth_user_ops_MBPS <= 150) {
-//    printf("->>>>??? Resuming compaction work from SILK\n");
-//    running_db_->ContinueCompactionWork();
-//    pausedcompaction = false;
-//  }
+  // SILK TESTING the Pause compaction work functionality
+  if (!pausedcompaction && cur_bandwidth_user_ops_MBPS > 150) {
+    // SILK Consider this a load peak
+    printf("->>>>??? Pausing compaction work from SILK\n");
+    running_db_->PauseCompactionWork();
+    pausedcompaction = true;
+  } else if (pausedcompaction && cur_bandwidth_user_ops_MBPS <= 150) {
+    printf("->>>>??? Resuming compaction work from SILK\n");
+    running_db_->ContinueCompactionWork();
+    pausedcompaction = false;
+  }
 
   long cur_bandiwdth_compaction_MBPS =
       FLAGS_SILK_bandwidth_limitation -
@@ -186,6 +186,7 @@ Status ReporterAgentWithSILK::ReportLine(int secs_elapsed,
   auto s = report_file_->Append(report);
   return s;
 }
+
 ReporterAgentWithSILK::ReporterAgentWithSILK(DBImpl* running_db, Env* env,
                                              const std::string& fname,
                                              uint64_t report_interval_secs,
