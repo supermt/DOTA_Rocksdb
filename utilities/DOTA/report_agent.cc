@@ -65,38 +65,55 @@ void ReporterAgentWithTuning::UseFEATTuner(bool TEA_enable, bool FEA_enable) {
                              &total_ops_done_, env_, tuning_gap_secs_,
                              TEA_enable, FEA_enable));
 };
+
+Status update_db_options(
+    DBImpl* running_db_,
+    std::unordered_map<std::string, std::string>* new_db_options, Env* env) {
+  Status s = running_db_->SetDBOptions(*new_db_options);
+  env->SleepForMicroseconds(5000000);
+  free(new_db_options);
+  return s;
+}
+
+Status update_cf_options(
+    DBImpl* running_db_,
+    std::unordered_map<std::string, std::string>* new_cf_options, Env* env) {
+  Status s = running_db_->SetOptions(*new_cf_options);
+  free(new_cf_options);
+  return s;
+}
+
 void ReporterAgentWithTuning::ApplyChangePointsInstantly(
     std::vector<ChangePoint>* points) {
-  std::unordered_map<std::string, std::string> new_cf_options;
-  std::unordered_map<std::string, std::string> new_db_options;
+  std::unordered_map<std::string, std::string>* new_cf_options;
+  std::unordered_map<std::string, std::string>* new_db_options;
 
+  new_cf_options = new std::unordered_map<std::string, std::string>();
+  new_db_options = new std::unordered_map<std::string, std::string>();
   if (points->empty()) {
     return;
   }
 
   for (auto point : *points) {
     if (point.db_width) {
-      new_db_options.emplace(point.opt, point.value);
+      new_db_options->emplace(point.opt, point.value);
     } else {
-      new_cf_options.emplace(point.opt, point.value);
+      new_cf_options->emplace(point.opt, point.value);
     }
   }
   points->clear();
   Status s;
-  env_->SleepForMicroseconds(5000000);
-  if (!new_db_options.empty()) {
-    s = running_db_->SetDBOptions(new_db_options);
-    if (!s.ok()) {
-      std::cout << "Setting Failed due to " << s.ToString() << std::endl;
-    }
+  if (!new_db_options->empty()) {
+    //    std::thread t();
+    std::thread t(update_db_options, running_db_, new_db_options, env_);
+    t.detach();
   }
-  if (!new_cf_options.empty()) {
-    s = running_db_->SetOptions(new_cf_options);
-    if (!s.ok()) {
-      std::cout << "Setting Failed due to " << s.ToString() << std::endl;
-    }
+  if (!new_cf_options->empty()) {
+    std::thread t(update_cf_options, running_db_, new_cf_options, env_);
+    t.detach();
   }
 }
+
 ReporterAgentWithTuning::ReporterAgentWithTuning(DBImpl* running_db, Env* env,
                                                  const std::string& fname,
                                                  uint64_t report_interval_secs,
