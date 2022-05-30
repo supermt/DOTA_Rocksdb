@@ -81,7 +81,7 @@ struct ChangePoint {
   int change_timing;
   bool db_width;
 };
-enum OpType : int { kDouble, kLinearIncrease, kLinearDecrease, kHalf, kKeep };
+enum OpType : int { kLinearIncrease, kHalf, kKeep };
 struct TuningOP {
   OpType BatchOp;
   OpType ThreadOp;
@@ -235,7 +235,7 @@ class DOTA_Tuner {
   int max_thread = core_num;
   const int min_thread = 2;
   uint64_t max_memtable_size;
-  const uint64_t min_memtable_size = 32 << 20;
+  const uint64_t min_memtable_size = 64 << 20;
 
   SystemScores ScoreTheSystem();
   void AdjustmentTuning(std::vector<ChangePoint>* change_list,
@@ -308,12 +308,8 @@ class FEAT_Tuner : public DOTA_Tuner {
 };
 inline const char* OpString(OpType v) {
   switch (v) {
-    case kDouble:
-      return "Double";
     case kLinearIncrease:
       return "Linear Increase";
-    case kLinearDecrease:
-      return "Linear Decrease";
     case kHalf:
       return "Half";
     case kKeep:

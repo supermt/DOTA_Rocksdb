@@ -207,7 +207,7 @@ TuningOP DOTA_Tuner::VoteForOP(SystemScores & /*current_score*/,
       op.ThreadOp = kKeep;
       break;
     case kIdle:
-      op.ThreadOp = kLinearDecrease;
+      op.ThreadOp = kHalf;
       break;
     case kBandwidthCongestion:
       op.ThreadOp = kHalf;
@@ -219,7 +219,7 @@ TuningOP DOTA_Tuner::VoteForOP(SystemScores & /*current_score*/,
   } else if (batch_level == kStallFree) {
     op.BatchOp = kKeep;
   } else {
-    op.BatchOp = kLinearDecrease;
+    op.BatchOp = kHalf;
   }
 
   return op;
@@ -267,16 +267,9 @@ void DOTA_Tuner::FillUpChangeList(std::vector<ChangePoint> *change_list,
   uint64_t current_thread_num = current_opt.max_background_jobs;
   uint64_t current_batch_size = current_opt.write_buffer_size;
   switch (op.BatchOp) {
-    case kDouble:
-      SetBatchSize(change_list, current_batch_size *= 2);
-      break;
     case kLinearIncrease:
       SetBatchSize(change_list,
                    current_batch_size += default_opts.write_buffer_size);
-      break;
-    case kLinearDecrease:
-      SetBatchSize(change_list,
-                   current_batch_size -= default_opts.write_buffer_size);
       break;
     case kHalf:
       SetBatchSize(change_list, current_batch_size /= 2);
@@ -285,14 +278,8 @@ void DOTA_Tuner::FillUpChangeList(std::vector<ChangePoint> *change_list,
       break;
   }
   switch (op.ThreadOp) {
-    case kDouble:
-      SetThreadNum(change_list, current_thread_num *= 2);
-      break;
     case kLinearIncrease:
       SetThreadNum(change_list, current_thread_num += 2);
-      break;
-    case kLinearDecrease:
-      SetThreadNum(change_list, current_thread_num -= 2);
       break;
     case kHalf:
       SetThreadNum(change_list, current_thread_num /= 2);
@@ -378,23 +365,23 @@ SystemScores FEAT_Tuner::normalize(SystemScores &origin_score) {
 TuningOP FEAT_Tuner::TuneByTEA() {
   // the flushing speed is low.
   TuningOP result{kKeep, kKeep};
-  if (current_score_.compaction_idle_time >
-             idle_threshold * tuning_gap) {
-    result.ThreadOp = kLinearDecrease;
-    }
+  if (current_score_.compaction_idle_time > idle_threshold * tuning_gap) {
+    result.ThreadOp = kHalf;
+  }
 
-    if (current_score_.estimate_compaction_bytes > 0.8) {
-      result.ThreadOp = kLinearIncrease;
-    }
+  if (current_score_.estimate_compaction_bytes > 0.8) {
+    result.ThreadOp = kLinearIncrease;
+  }
 
-    if (current_score_.l0_num > 0.5) result.ThreadOp = kDouble;
+  if (current_score_.l0_num > 0.8) result.ThreadOp = kLinearIncrease;
 
-    if (current_score_.flush_speed_avg <= max_scores.flush_speed_avg * TEA_slow_flush 
-            && current_score_.flush_speed_avg != 0) {
-        result.ThreadOp = kHalf;
-    }
+  if (current_score_.flush_speed_avg <=
+          max_scores.flush_speed_avg * TEA_slow_flush &&
+      current_score_.flush_speed_avg != 0) {
+    result.ThreadOp = kHalf;
+  }
 
-    return result;
+  return result;
 }
 
 TuningOP FEAT_Tuner::TuneByFEA() {
@@ -404,13 +391,12 @@ TuningOP FEAT_Tuner::TuneByFEA() {
       double esitmate_gap =  (double)(current_opt.write_buffer_size >> 20) /
                            max_scores.memtable_speed;
       if (esitmate_gap > FEA_gap_threshold * tuning_gap) {
-        negative_protocol.BatchOp = kLinearDecrease;
-       }
-
+        negative_protocol.BatchOp = kHalf;
+      }
   }
 
   if (current_score_.immutable_number > 1) {
-    negative_protocol.BatchOp = kDouble;
+    negative_protocol.BatchOp = kLinearIncrease;
   }
 
 //  if (current_score_.memtable_speed + current_score_.active_size_ratio >

@@ -634,7 +634,7 @@ DEFINE_string(change_points, "",
 DEFINE_string(ycsb_workload, "", "The workload of YCSB");
 DEFINE_int64(load_num, 100000, "Num of operations in loading phrase");
 DEFINE_int64(running_num, 100000, "Num of operations in running phrase");
-DEFINE_int64(core_num, 24, "The limit of thread number");
+DEFINE_int64(core_num, 20, "The limit of thread number");
 DEFINE_int64(max_memtable_size, ROCKSDB_NAMESPACE::Options().max_memtable_size,
              "The size of Max batch size");
 DEFINE_bool(DOTA_enabled, false, "Whether trigger the DOTA framework");
