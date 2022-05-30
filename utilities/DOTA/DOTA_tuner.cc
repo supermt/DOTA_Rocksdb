@@ -230,6 +230,7 @@ inline void DOTA_Tuner::SetThreadNum(std::vector<ChangePoint> *change_list,
   ChangePoint thread_num_cp;
   thread_num_cp.opt = max_bg_jobs;
   thread_num_cp.db_width = true;
+  if (target_value == min_thread || target_value == max_thread) return;
   target_value = std::max(target_value, min_thread);
   target_value = std::min(target_value, max_thread);
   thread_num_cp.value = ToString(target_value);
@@ -241,6 +242,9 @@ inline void DOTA_Tuner::SetBatchSize(std::vector<ChangePoint> *change_list,
   ChangePoint memtable_size_cp;
   memtable_size_cp.db_width = false;
   memtable_size_cp.opt = memtable_size;
+
+  if (target_value == min_memtable_size || target_value == max_memtable_size)
+    return;
 
   ChangePoint sst_size;
   sst_size.opt = table_size;

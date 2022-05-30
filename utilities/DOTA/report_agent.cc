@@ -83,6 +83,7 @@ void ReporterAgentWithTuning::ApplyChangePointsInstantly(
   }
   points->clear();
   Status s;
+  env_->SleepForMicroseconds(5000000);
   if (!new_db_options.empty()) {
     s = running_db_->SetDBOptions(new_db_options);
     if (!s.ok()) {
