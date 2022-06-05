@@ -68,16 +68,17 @@ void ReporterAgentWithTuning::UseFEATTuner(bool TEA_enable, bool FEA_enable) {
 
 Status update_db_options(
     DBImpl* running_db_,
-    std::unordered_map<std::string, std::string>* new_db_options, Env* env) {
+    std::unordered_map<std::string, std::string>* new_db_options,
+    Env* /*env*/) {
   Status s = running_db_->SetDBOptions(*new_db_options);
-  env->SleepForMicroseconds(5000000);
   free(new_db_options);
   return s;
 }
 
 Status update_cf_options(
     DBImpl* running_db_,
-    std::unordered_map<std::string, std::string>* new_cf_options, Env* env) {
+    std::unordered_map<std::string, std::string>* new_cf_options,
+    Env* /*env*/) {
   Status s = running_db_->SetOptions(*new_cf_options);
   free(new_cf_options);
   return s;
