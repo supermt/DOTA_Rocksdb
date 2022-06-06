@@ -369,9 +369,6 @@ SystemScores FEAT_Tuner::normalize(SystemScores &origin_score) {
 TuningOP FEAT_Tuner::TuneByTEA() {
   // the flushing speed is low.
   TuningOP result{kKeep, kKeep};
-  if (current_score_.compaction_idle_time > idle_threshold * tuning_gap) {
-    result.ThreadOp = kHalf;
-  }
 
   if (current_score_.estimate_compaction_bytes > 0.8) {
     result.ThreadOp = kLinearIncrease;
@@ -391,14 +388,6 @@ TuningOP FEAT_Tuner::TuneByTEA() {
 TuningOP FEAT_Tuner::TuneByFEA() {
   TuningOP negative_protocol{kKeep, kKeep};
 
-  if (max_scores.memtable_speed !=0){
-      double esitmate_gap =  (double)(current_opt.write_buffer_size >> 20) /
-                           max_scores.memtable_speed;
-      if (esitmate_gap > FEA_gap_threshold * tuning_gap) {
-        negative_protocol.BatchOp = kHalf;
-      }
-  }
-
   if (current_score_.immutable_number > 1) {
     negative_protocol.BatchOp = kLinearIncrease;
   }
@@ -409,7 +398,7 @@ TuningOP FEAT_Tuner::TuneByFEA() {
 //    negative_protocol.BatchOp = kDouble;
 //  }
 
-  if (current_score_.estimate_compaction_bytes > 0.8) {
+  if (current_score_.estimate_compaction_bytes > 0.8 || current_score_.l0_num > 0.8) {
     negative_protocol.BatchOp = kHalf;
   }
 
