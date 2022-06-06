@@ -198,10 +198,11 @@ Status ReporterAgentWithSILK::ReportLine(int secs_elapsed,
                                               1000 * 1000);
     prev_bandwidth_compaction_MBPS = cur_bandiwdth_compaction_MBPS;
   }
-
+  env_->SleepForMicroseconds(10);
   // Adjust the tuner from SILK before reporting
   std::string report = ToString(secs_elapsed) + "," +
-                       ToString(total_ops_done_snapshot - last_report_);
+                       ToString(total_ops_done_snapshot - last_report_) + "," +
+                       ToString(cur_bandwidth_user_ops_MBPS);
   auto s = report_file_->Append(report);
   return s;
 }

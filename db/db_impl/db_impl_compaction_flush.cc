@@ -2026,6 +2026,27 @@ void DBImpl::MaybeScheduleFlushOrCompaction() {
     }
   }
 
+  // SILK. If necessary, here we can schedule a HIGH priority compaction
+  // This will be (L0->L1) compactions because they are picked first by the
+  // compaction picker.
+  // This compaction has priority and it will be scheduled even if background
+  // compactions are paused by bg_compaction_paused_
+
+  ColumnFamilyData* cfd =
+      static_cast<ColumnFamilyHandleImpl*>(DefaultColumnFamily())->cfd();
+  VersionStorageInfo* vstorage = cfd->current()->storage_info();
+  if (env_->GetThreadPoolQueueLen(Env::Priority::HIGH) < 2 &&
+      (num_running_flushes_ < 2 || unscheduled_flushes_ < 2) &&
+      unscheduled_compactions_ > 0 && vstorage->NumLevelFiles(0) >= 4) {
+    CompactionArg* ca = new CompactionArg;
+    ca->db = this;
+    ca->prepicked_compaction = nullptr;
+    bg_compaction_scheduled_++;
+    unscheduled_compactions_--;
+    env_->Schedule(&DBImpl::BGWorkCompaction, ca, Env::Priority::HIGH, this,
+                   &DBImpl::UnscheduleCallback);
+  }
+
   if (bg_compaction_paused_ > 0) {
     // we paused the background compaction
     return;
@@ -2204,6 +2225,17 @@ void DBImpl::BGWorkPurge(void* db) {
   TEST_SYNC_POINT("DBImpl::BGWorkPurge:start");
   reinterpret_cast<DBImpl*>(db)->BackgroundCallPurge();
   TEST_SYNC_POINT("DBImpl::BGWorkPurge:end");
+}
+
+// SILK
+void DBImpl::UnscheduleCallback(void* arg) {
+  CompactionArg ca = *(reinterpret_cast<CompactionArg*>(arg));
+  delete reinterpret_cast<CompactionArg*>(arg);
+  if ((ca.prepicked_compaction != nullptr) &&
+      (ca.prepicked_compaction->compaction != nullptr)) {
+    delete ca.prepicked_compaction->compaction;
+  }
+  TEST_SYNC_POINT("DBImpl::UnscheduleCallback");
 }
 
 void DBImpl::UnscheduleCompactionCallback(void* arg) {
