@@ -983,7 +983,7 @@ static std::string ColumnFamilyName(size_t i) {
   }
 }
 
-DEFINE_string(compression_type, "snappy",
+DEFINE_string(compression_type, "none",
               "Algorithm to use to compress the database");
 static enum ROCKSDB_NAMESPACE::CompressionType FLAGS_compression_type_e =
     ROCKSDB_NAMESPACE::kSnappyCompression;
@@ -1050,7 +1050,7 @@ DEFINE_int32(stats_per_interval, 0,
              "Reports additional stats per interval when"
              " this is greater than 0.");
 
-DEFINE_int64(report_interval_seconds, 0,
+DEFINE_int64(report_interval_seconds, 1,
              "If greater than zero, it will write simple stats in CVS format "
              "to --report_file every N seconds");
 
@@ -2349,7 +2349,6 @@ class Duration {
     }
   }
 
- private:
   uint64_t max_seconds_;
   int64_t max_ops_;
   int64_t ops_per_stage_;

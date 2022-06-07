@@ -84,6 +84,18 @@ Status update_cf_options(
   return s;
 }
 
+Status SILK_pause_compaction(DBImpl* running_db_, bool* stopped) {
+  Status s = running_db_->PauseCompactionWork();
+  *stopped = true;
+  return s;
+}
+
+Status SILK_resume_compaction(DBImpl* running_db_, bool* stopped) {
+  Status s = running_db_->ContinueCompactionWork();
+  *stopped = false;
+  return s;
+}
+
 void ReporterAgentWithTuning::ApplyChangePointsInstantly(
     std::vector<ChangePoint>* points) {
   std::unordered_map<std::string, std::string>* new_cf_options;
@@ -173,15 +185,20 @@ Status ReporterAgentWithSILK::ReportLine(int secs_elapsed,
       cur_throughput * FLAGS_value_size / 1000000;
 
   // SILK TESTING the Pause compaction work functionality
-  if (!pausedcompaction && cur_bandwidth_user_ops_MBPS > 150) {
+  if (!pausedcompaction &&
+      cur_bandwidth_user_ops_MBPS > FLAGS_SILK_bandwidth_limitation * 0.75) {
     // SILK Consider this a load peak
     printf("->>>>??? Pausing compaction work from SILK\n");
-    running_db_->PauseCompactionWork();
-    pausedcompaction = true;
-  } else if (pausedcompaction && cur_bandwidth_user_ops_MBPS <= 150) {
+    //    running_db_->PauseCompactionWork();
+    //    pausedcompaction = true;
+    std::thread t(SILK_pause_compaction, running_db_, &pausedcompaction);
+    t.detach();
+
+  } else if (pausedcompaction && cur_bandwidth_user_ops_MBPS <=
+                                     FLAGS_SILK_bandwidth_limitation * 0.75) {
     printf("->>>>??? Resuming compaction work from SILK\n");
-    running_db_->ContinueCompactionWork();
-    pausedcompaction = false;
+    std::thread t(SILK_resume_compaction, running_db_, &pausedcompaction);
+    t.detach();
   }
 
   long cur_bandiwdth_compaction_MBPS =
