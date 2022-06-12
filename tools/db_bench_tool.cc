@@ -2057,6 +2057,12 @@ class Stats {
     }
 
     done_ += num_ops;
+
+    if (FLAGS_duration > 0){
+         uint64_t execution_time = FLAGS_env->NowMicros() -start_;
+         execution_time /=1000000;
+    }
+
     if (done_ >= next_report_) {
       if (!FLAGS_stats_interval) {
         if (next_report_ < 1000)
@@ -3495,7 +3501,6 @@ class Benchmark {
     SetPerfLevel(static_cast<PerfLevel>(shared->perf_level));
     perf_context.EnablePerLevelPerfContext();
     thread->stats.Start(thread->tid);
-    // detect whether change point worker
     (arg->bm->*(arg->method))(thread);
     thread->stats.Stop();
 
@@ -4574,22 +4579,11 @@ class Benchmark {
       std::ifstream input(FLAGS_ycsb_workload);
       props.Load(input);
     }
-    if (props.GetProperty(ycsbc::CoreWorkload::RECORD_COUNT_PROPERTY).empty()) {
-      props.SetProperty(ycsbc::CoreWorkload::RECORD_COUNT_PROPERTY,
+    props.SetProperty(ycsbc::CoreWorkload::RECORD_COUNT_PROPERTY,
                         std::to_string(FLAGS_load_num));
-    } else {
-      FLAGS_load_num = std::stoi(
-          props.GetProperty(ycsbc::CoreWorkload::RECORD_COUNT_PROPERTY));
-    }
-    if (props.GetProperty(ycsbc::CoreWorkload::OPERATION_COUNT_PROPERTY)
-            .empty()) {
-      props.SetProperty(ycsbc::CoreWorkload::OPERATION_COUNT_PROPERTY,
-                        std::to_string(FLAGS_load_num));
-    } else {
-      FLAGS_running_num = std::stoi(
-          props.GetProperty(ycsbc::CoreWorkload::OPERATION_COUNT_PROPERTY));
-    }
-    wl.Init(props);
+    props.SetProperty(ycsbc::CoreWorkload::OPERATION_COUNT_PROPERTY,
+                        std::to_string(FLAGS_running_num));
+   wl.Init(props);
   }
   void YCSBLoader(ThreadState* thread) {
     ycsbc::CoreWorkload wl;
@@ -4712,8 +4706,7 @@ class Benchmark {
     int64_t ops_per_stage = 1;
 
     // load first, then run
-    Duration loading_duration(test_duration, remain_loading, ops_per_stage);
-    Duration running_duration(test_duration, remain_running, ops_per_stage);
+    Duration loading_duration(0, remain_loading, ops_per_stage);
     int stage = 0;
     //    WriteBatch batch;
     Status s;
@@ -4737,7 +4730,7 @@ class Benchmark {
           }
         }
         std::string key = workload->BuildKeyName();
-        Slice val = gen.Generate();
+        Slice val = gen.Generate(FLAGS_value_size);
         db_.db->Put(w_op, key, val);
 
         int64_t batch_bytes = 0;
@@ -4756,6 +4749,7 @@ class Benchmark {
       thread->stats.AddBytes(bytes);
     }
 
+    Duration running_duration(test_duration, remain_running, ops_per_stage);
     if (run) {
       duration = running_duration;
 
@@ -4789,13 +4783,13 @@ class Benchmark {
             thread->stats.FinishedOps(nullptr, db, entries_per_batch_, kRead);
           } break;
           case ycsbc::UPDATE: {
-            Slice val = gen.Generate();
+            Slice val = gen.Generate(FLAGS_value_size);
             // In rocksdb, update is just another put operation.
             op_status = db_.db->Put(w_op, key, val);
             thread->stats.FinishedOps(nullptr, db, entries_per_batch_, kUpdate);
           } break;
           case ycsbc::INSERT: {
-            Slice val = gen.Generate();
+            Slice val = gen.Generate(FLAGS_value_size);
             // In rocksdb, update is just another put operation.
             op_status = db_.db->Put(w_op, key, val);
             thread->stats.FinishedOps(nullptr, db, entries_per_batch_, kWrite);
@@ -4817,7 +4811,7 @@ class Benchmark {
             if (op_status.IsNotFound()) {
               blind_updates++;
             }
-            Slice val = gen.Generate();
+            Slice val = gen.Generate(FLAGS_value_size);
             op_status = db_.db->Put(w_op, key, val);
             thread->stats.FinishedOps(nullptr, db, entries_per_batch_,
                                       kReadModifyWrite);
@@ -4830,10 +4824,14 @@ class Benchmark {
             throw ycsbc::utils::Exception(
                 "Operation request is not recognized!");
         }
-      }
+      }// end while
+
       thread->stats.AddBytes(bytes);
-    }
+      std::cout << "read state(found/read): " << found_count <<"/"<< read_count <<std::endl;
+      std::cout << "blind_updates: " << blind_updates <<std::endl; 
+    } 
   }
+
   void DoWrite(ThreadState* thread, WriteMode write_mode) {
     const int test_duration = write_mode == RANDOM ? FLAGS_duration : 0;
     const int64_t num_ops = writes_ == 0 ? num_ : writes_;
@@ -4892,9 +4890,8 @@ class Benchmark {
 
     int64_t stage = 0;
     int64_t num_written = 0;
-
     while (!duration.Done(entries_per_batch_)) {
-      if (duration.GetStage() != stage) {
+       if (duration.GetStage() != stage) {
         stage = duration.GetStage();
         if (db_.db != nullptr) {
           db_.CreateNewCf(open_options_, stage);
@@ -5034,6 +5031,7 @@ class Benchmark {
         exit(1);
       }
     }
+
     std::cout << "flags have been generated for:[";
     for (int i = 0; i < 3; i++) {
       std::cout << " " << hit_counts[i];
@@ -7581,6 +7579,7 @@ class Benchmark {
       stats = "(failed)";
     }
     fprintf(stdout, "\n%s\n", stats.c_str());
+    exit(0);
   }
 
   void Replay(ThreadState* thread) {

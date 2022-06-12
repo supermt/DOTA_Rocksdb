@@ -1141,6 +1141,57 @@ Status DBImpl::ContinueBackgroundWork() {
   return Status::OK();
 }
 
+Status DBImpl::PauseCompactionWork() {
+  // Copy from SILK, https://github.com/theoanab/SILK-USENIXATC2019
+  //
+  InstrumentedMutexLock guard_lock(&mutex_);
+  bg_compaction_paused_++;
+  while (bg_bottom_compaction_scheduled_ > 0 || bg_compaction_scheduled_ > 0) {
+    bg_cv_.Wait();
+  }
+  bg_work_paused_++;
+
+//  printf(" ->>>>??? Pausing compaction from DB\n");
+//  InstrumentedMutexLock guard_lock(&mutex_);
+//  bg_compaction_paused_++;
+//  while (bg_compaction_scheduled_ > 0) {
+//    bg_cv_.Wait();
+//  }
+//  bg_compaction_paused_++;
+  return Status::OK();
+}
+Status DBImpl::ContinueCompactionWork() {
+//
+  InstrumentedMutexLock guard_lock(&mutex_);
+  if (bg_work_paused_ == 0) {
+    return Status::InvalidArgument();
+  }
+  assert(bg_work_paused_ > 0);
+  assert(bg_compaction_paused_ > 0);
+  bg_compaction_paused_--;
+  bg_work_paused_--;
+  // It's sufficient to check just bg_work_paused_ here since
+  // bg_work_paused_ is always no greater than bg_compaction_paused_
+  if (bg_work_paused_ == 0) {
+    MaybeScheduleFlushOrCompaction();
+  }
+ 
+//  printf(" ->>>>??? Resuming compaction from DB\n");
+//  InstrumentedMutexLock guard_lock(&mutex_);
+//  if (bg_compaction_paused_ == 0) {
+//    return Status::InvalidArgument();
+//  }
+//  assert(bg_compaction_paused_ > 0);
+//  assert(bg_work_paused_ > 0);
+//  bg_compaction_paused_--;
+//  // It's sufficient to check just bg_work_paused_ here since
+//  // bg_work_paused_ is always no greater than bg_compaction_paused_
+//  if (bg_compaction_paused_ == 0) {
+//    MaybeScheduleFlushOrCompaction();
+//  }
+  return Status::OK();
+}
+
 void DBImpl::NotifyOnCompactionBegin(ColumnFamilyData* cfd, Compaction* c,
                                      const Status& st,
                                      const CompactionJobStats& job_stats,
@@ -1944,34 +1995,6 @@ void DBImpl::DisableManualCompaction() {
 
 void DBImpl::EnableManualCompaction() {
   manual_compaction_paused_.store(false, std::memory_order_release);
-}
-
-Status DBImpl::PauseCompactionWork() {
-  // Copy from SILK, https://github.com/theoanab/SILK-USENIXATC2019
-  std::cout << "Stopping the compaction work" << std::endl;
-  printf(" ->>>>??? Pausing compaction from DB\n");
-  InstrumentedMutexLock guard_lock(&mutex_);
-  bg_compaction_paused_++;
-  while (bg_compaction_scheduled_ > 0) {
-    bg_cv_.Wait();
-  }
-  bg_compaction_paused_++;
-  return Status::OK();
-}
-Status DBImpl::ContinueCompactionWork() {
-  printf(" ->>>>??? Resuming compaction from DB\n");
-  InstrumentedMutexLock guard_lock(&mutex_);
-  if (bg_compaction_paused_ == 0) {
-    return Status::InvalidArgument();
-  }
-  assert(bg_compaction_paused_ > 0);
-  bg_compaction_paused_--;
-  // It's sufficient to check just bg_work_paused_ here since
-  // bg_work_paused_ is always no greater than bg_compaction_paused_
-  if (bg_compaction_paused_ == 0) {
-    MaybeScheduleFlushOrCompaction();
-  }
-  return Status::OK();
 }
 
 void DBImpl::MaybeScheduleFlushOrCompaction() {

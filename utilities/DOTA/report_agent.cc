@@ -178,7 +178,6 @@ void ReporterWithMoreDetails::DetectAndTuning(int secs_elapsed) {
 Status ReporterAgentWithSILK::ReportLine(int secs_elapsed,
                                          int total_ops_done_snapshot) {
   // copy from SILK https://github.com/theoanab/SILK-USENIXATC2019
-
   // //check the current bandwidth for user operations
   long cur_throughput = (total_ops_done_snapshot - last_report_);
   long cur_bandwidth_user_ops_MBPS =
@@ -186,17 +185,15 @@ Status ReporterAgentWithSILK::ReportLine(int secs_elapsed,
 
   // SILK TESTING the Pause compaction work functionality
   if (!pausedcompaction &&
-      cur_bandwidth_user_ops_MBPS > FLAGS_SILK_bandwidth_limitation * 0.75) {
+      cur_bandwidth_user_ops_MBPS > FLAGS_SILK_bandwidth_limitation*0.75) {
     // SILK Consider this a load peak
-    printf("->>>>??? Pausing compaction work from SILK\n");
     //    running_db_->PauseCompactionWork();
     //    pausedcompaction = true;
+    pausedcompaction = true;
     std::thread t(SILK_pause_compaction, running_db_, &pausedcompaction);
     t.detach();
 
-  } else if (pausedcompaction && cur_bandwidth_user_ops_MBPS <=
-                                     FLAGS_SILK_bandwidth_limitation * 0.75) {
-    printf("->>>>??? Resuming compaction work from SILK\n");
+  } else if (pausedcompaction && cur_bandwidth_user_ops_MBPS <= FLAGS_SILK_bandwidth_limitation*0.75) {
     std::thread t(SILK_resume_compaction, running_db_, &pausedcompaction);
     t.detach();
   }
@@ -207,7 +204,6 @@ Status ReporterAgentWithSILK::ReportLine(int secs_elapsed,
   if (cur_bandiwdth_compaction_MBPS < 10) {
     cur_bandiwdth_compaction_MBPS = 10;
   }
-
   if (abs(prev_bandwidth_compaction_MBPS - cur_bandiwdth_compaction_MBPS) >=
       10) {
     auto opt = running_db_->GetOptions();
@@ -215,7 +211,6 @@ Status ReporterAgentWithSILK::ReportLine(int secs_elapsed,
                                               1000 * 1000);
     prev_bandwidth_compaction_MBPS = cur_bandiwdth_compaction_MBPS;
   }
-  env_->SleepForMicroseconds(10);
   // Adjust the tuner from SILK before reporting
   std::string report = ToString(secs_elapsed) + "," +
                        ToString(total_ops_done_snapshot - last_report_) + "," +
