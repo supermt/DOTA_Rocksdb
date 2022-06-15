@@ -36,17 +36,17 @@ inline uint64_t FNVHash64(uint64_t val) {
 
 inline uint64_t Hash(uint64_t val) { return FNVHash64(val); }
 
-inline uint32_t ThreadLocalRandomInt() {
-  static thread_local std::random_device rd;
+inline uint32_t ThreadLocalRandomInt() { 
+  static thread_local std::random_device rd("mt19937");
   static thread_local std::minstd_rand rn(rd());
   return rn();
 }
 
 inline double ThreadLocalRandomDouble(double min = 0.0, double max = 1.0) {
-  static thread_local std::random_device rd;
-  static thread_local std::minstd_rand rn(rd());
+static thread_local std::default_random_engine eng{0};
   static thread_local std::uniform_real_distribution<double> uniform(min, max);
-  return uniform(rn);
+  return uniform(eng);
+
 }
 
 ///
