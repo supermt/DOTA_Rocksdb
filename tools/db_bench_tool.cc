@@ -4778,8 +4778,6 @@ class Benchmark {
             if (op_status.ok()) {
               found_count++;
               bytes += key.size() + data.size();
-            }else{
-                std::cout << op_status.code() <<std::endl;
             }
             read_count++;
             thread->stats.FinishedOps(nullptr, db, entries_per_batch_, kRead);
