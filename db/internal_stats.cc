@@ -976,6 +976,11 @@ void InternalStats::DumpDBStats(std::string* value) {
   uint64_t write_with_wal = GetDBStats(InternalStats::kIntStatsWriteWithWal);
   uint64_t write_stall_micros =
       GetDBStats(InternalStats::kIntStatsWriteStallMicros);
+  uint64_t l0_stall_micros = GetDBStats(InternalStats::kIntStatsL0StallMicros);
+  uint64_t mem_stall_micros =
+      GetDBStats(InternalStats::kIntStatsMemStallMicros);
+  uint64_t pending_stall_micros =
+      GetDBStats(InternalStats::kIntStatsPendingStallMicros);
 
   const int kHumanMicrosLen = 32;
   char human_micros[kHumanMicrosLen];
@@ -1013,6 +1018,18 @@ void InternalStats::DumpDBStats(std::string* value) {
            human_micros,
            // 10000 = divide by 1M to get secs, then multiply by 100 for pct
            write_stall_micros / 10000.0 / std::max(seconds_up, 0.001));
+  value->append(buf);
+  // l0 duration
+  AppendHumanMicros(l0_stall_micros, human_micros, kHumanMicrosLen, true);
+  snprintf(buf, sizeof(buf), "Cumulative L0 stall: %s\n", human_micros);
+  value->append(buf);
+  // mem duration
+  AppendHumanMicros(mem_stall_micros, human_micros, kHumanMicrosLen, true);
+  snprintf(buf, sizeof(buf), "Cumulative Mem stall: %s\n", human_micros);
+  value->append(buf);
+  // pending duration
+  AppendHumanMicros(pending_stall_micros, human_micros, kHumanMicrosLen, true);
+  snprintf(buf, sizeof(buf), "Cumulative Pending stall: %s\n", human_micros);
   value->append(buf);
 
   // Interval
@@ -1059,6 +1076,20 @@ void InternalStats::DumpDBStats(std::string* value) {
                10000.0 / std::max(interval_seconds_up, 0.001));
   value->append(buf);
 
+  AppendHumanMicros(l0_stall_micros - db_stats_snapshot_.l0_stall_micros,
+                    human_micros, kHumanMicrosLen, true);
+  snprintf(buf, sizeof(buf), "Interval L0 stall: %s\n", human_micros);
+
+  AppendHumanMicros(mem_stall_micros - db_stats_snapshot_.mem_stall_micros,
+                    human_micros, kHumanMicrosLen, true);
+  snprintf(buf, sizeof(buf), "Interval Mem stall: %s\n", human_micros);
+
+  AppendHumanMicros(
+      pending_stall_micros - db_stats_snapshot_.pending_stall_micros,
+      human_micros, kHumanMicrosLen, true);
+  snprintf(buf, sizeof(buf), "Interval Pending stall: %s\n", human_micros);
+  value->append(buf);
+
   db_stats_snapshot_.seconds_up = seconds_up;
   db_stats_snapshot_.ingest_bytes = user_bytes_written;
   db_stats_snapshot_.write_other = write_other;
@@ -1068,6 +1099,9 @@ void InternalStats::DumpDBStats(std::string* value) {
   db_stats_snapshot_.wal_synced = wal_synced;
   db_stats_snapshot_.write_with_wal = write_with_wal;
   db_stats_snapshot_.write_stall_micros = write_stall_micros;
+  db_stats_snapshot_.l0_stall_micros = l0_stall_micros;
+  db_stats_snapshot_.mem_stall_micros = mem_stall_micros;
+  db_stats_snapshot_.pending_stall_micros = pending_stall_micros;
 }
 
 /**

@@ -870,6 +870,7 @@ WriteStallCondition ColumnFamilyData::RecalculateWriteStallConditions(
     if (write_stall_condition == WriteStallCondition::kStopped &&
         write_stall_cause == WriteStallCause::kMemtableLimit) {
       write_controller_token_ = write_controller->GetStopToken();
+      write_controller->SetControlReason(0);
       internal_stats_->AddCFStats(InternalStats::MEMTABLE_LIMIT_STOPS, 1);
       ROCKS_LOG_WARN(
           ioptions_.info_log,
@@ -879,6 +880,7 @@ WriteStallCondition ColumnFamilyData::RecalculateWriteStallConditions(
           mutable_cf_options.max_write_buffer_number);
     } else if (write_stall_condition == WriteStallCondition::kStopped &&
                write_stall_cause == WriteStallCause::kL0FileCountLimit) {
+      write_controller->SetControlReason(1);
       write_controller_token_ = write_controller->GetStopToken();
       internal_stats_->AddCFStats(InternalStats::L0_FILE_COUNT_LIMIT_STOPS, 1);
       if (compaction_picker_->IsLevel0CompactionInProgress()) {
@@ -890,6 +892,7 @@ WriteStallCondition ColumnFamilyData::RecalculateWriteStallConditions(
                      name_.c_str(), vstorage->l0_delay_trigger_count());
     } else if (write_stall_condition == WriteStallCondition::kStopped &&
                write_stall_cause == WriteStallCause::kPendingCompactionBytes) {
+      write_controller->SetControlReason(2);
       write_controller_token_ = write_controller->GetStopToken();
       internal_stats_->AddCFStats(
           InternalStats::PENDING_COMPACTION_BYTES_LIMIT_STOPS, 1);
@@ -900,6 +903,7 @@ WriteStallCondition ColumnFamilyData::RecalculateWriteStallConditions(
           name_.c_str(), compaction_needed_bytes);
     } else if (write_stall_condition == WriteStallCondition::kDelayed &&
                write_stall_cause == WriteStallCause::kMemtableLimit) {
+      write_controller->SetControlReason(0);
       write_controller_token_ =
           SetupDelay(write_controller, compaction_needed_bytes,
                      prev_compaction_needed_bytes_, was_stopped,
@@ -915,6 +919,7 @@ WriteStallCondition ColumnFamilyData::RecalculateWriteStallConditions(
           write_controller->delayed_write_rate());
     } else if (write_stall_condition == WriteStallCondition::kDelayed &&
                write_stall_cause == WriteStallCause::kL0FileCountLimit) {
+      write_controller->SetControlReason(1);
       // L0 is the last two files from stopping.
       bool near_stop = vstorage->l0_delay_trigger_count() >=
                        mutable_cf_options.level0_stop_writes_trigger - 2;
@@ -938,6 +943,7 @@ WriteStallCondition ColumnFamilyData::RecalculateWriteStallConditions(
       // If the distance to hard limit is less than 1/4 of the gap between soft
       // and
       // hard bytes limit, we think it is near stop and speed up the slowdown.
+      write_controller->SetControlReason(2);
       bool near_stop =
           mutable_cf_options.hard_pending_compaction_bytes_limit > 0 &&
           (compaction_needed_bytes -

@@ -117,6 +117,9 @@ class InternalStats {
     kIntStatsWriteDoneBySelf,
     kIntStatsWriteWithWal,
     kIntStatsWriteStallMicros,
+    kIntStatsL0StallMicros,
+    kIntStatsMemStallMicros,
+    kIntStatsPendingStallMicros,
     kIntStatsNumMax,
   };
 
@@ -495,6 +498,9 @@ class InternalStats {
     uint64_t num_keys_written;
     // Total time writes delayed by stalls.
     uint64_t write_stall_micros;
+    uint64_t l0_stall_micros;
+    uint64_t mem_stall_micros;
+    uint64_t pending_stall_micros;
     double seconds_up;
 
     DBStatsSnapshot()
@@ -506,6 +512,9 @@ class InternalStats {
           write_self(0),
           num_keys_written(0),
           write_stall_micros(0),
+          l0_stall_micros(0),
+          mem_stall_micros(0),
+          pending_stall_micros(0),
           seconds_up(0) {}
 
     void Clear() {
@@ -517,6 +526,9 @@ class InternalStats {
       write_self = 0;
       num_keys_written = 0;
       write_stall_micros = 0;
+      l0_stall_micros = 0;
+      mem_stall_micros = 0;
+      pending_stall_micros = 0;
       seconds_up = 0;
     }
   } db_stats_snapshot_;
@@ -633,6 +645,9 @@ class InternalStats {
     kIntStatsWriteDoneBySelf,
     kIntStatsWriteWithWal,
     kIntStatsWriteStallMicros,
+    kIntStatsL0StallMicros,
+    kIntStatsMemStallMicros,
+    kIntStatsPendingStallMicros,
     kIntStatsNumMax,
   };
 

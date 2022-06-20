@@ -1454,6 +1454,22 @@ Status DBImpl::DelayWrite(uint64_t num_bytes,
   if (delayed) {
     default_cf_internal_stats_->AddDBStats(
         InternalStats::kIntStatsWriteStallMicros, time_delayed);
+
+    switch (write_controller_.GetControlReason()) {
+      case 0:
+        default_cf_internal_stats_->AddDBStats(
+            InternalStats::kIntStatsMemStallMicros, time_delayed);
+        break;
+      case 1:
+        default_cf_internal_stats_->AddDBStats(
+            InternalStats::kIntStatsL0StallMicros, time_delayed);
+        break;
+      case 2:
+        default_cf_internal_stats_->AddDBStats(
+            InternalStats::kIntStatsPendingStallMicros, time_delayed);
+        break;
+    }
+
     RecordTick(stats_, STALL_MICROS, time_delayed);
   }
 

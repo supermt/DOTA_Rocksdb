@@ -9,6 +9,8 @@
 
 #include <atomic>
 #include <memory>
+
+#include "rocksdb/listener.h"
 #include "rocksdb/rate_limiter.h"
 
 namespace ROCKSDB_NAMESPACE {
@@ -38,6 +40,10 @@ class WriteController {
   // When an actor (column family) requests a stop token, all writes will be
   // stopped until the stop token is released (deleted)
   std::unique_ptr<WriteControllerToken> GetStopToken();
+
+  int GetControlReason() { return stall_reason; }
+  void SetControlReason(int stallCondition) { stall_reason = stallCondition; }
+
   // When an actor (column family) requests a delay token, total delay for all
   // writes to the DB will be controlled under the delayed write rate. Every
   // write needs to call GetDelay() with number of bytes writing to the DB,
@@ -101,6 +107,8 @@ class WriteController {
   uint64_t max_delayed_write_rate_;
   // current write rate
   uint64_t delayed_write_rate_;
+
+  int stall_reason;
 
   std::unique_ptr<RateLimiter> low_pri_rate_limiter_;
 };
