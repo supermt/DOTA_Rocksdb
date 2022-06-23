@@ -1079,10 +1079,12 @@ void InternalStats::DumpDBStats(std::string* value) {
   AppendHumanMicros(l0_stall_micros - db_stats_snapshot_.l0_stall_micros,
                     human_micros, kHumanMicrosLen, true);
   snprintf(buf, sizeof(buf), "Interval L0 stall: %s\n", human_micros);
+  value->append(buf);
 
   AppendHumanMicros(mem_stall_micros - db_stats_snapshot_.mem_stall_micros,
                     human_micros, kHumanMicrosLen, true);
   snprintf(buf, sizeof(buf), "Interval Mem stall: %s\n", human_micros);
+  value->append(buf);
 
   AppendHumanMicros(
       pending_stall_micros - db_stats_snapshot_.pending_stall_micros,
