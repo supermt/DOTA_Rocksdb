@@ -349,11 +349,12 @@ void FEAT_Tuner::DetectTuningOperations(int /*secs_elapsed*/,
       TuningOP fea_result = TuneByFEA();
       result.BatchOp = fea_result.BatchOp;
     }
-      
-//    if (current_score_.estimate_compaction_bytes <= 0.8 &&
-//        current_score_.immutable_number < 2 && current_score_.l0_num <= 0.8) {
-//      return;
-//    }
+
+    //    if (current_score_.estimate_compaction_bytes <= 0.8 &&
+    //        current_score_.immutable_number < 2 && current_score_.l0_num <=
+    //        0.8) {
+    //      return;
+    //    }
 
     FillUpChangeList(change_list, result);
   }
@@ -365,16 +366,19 @@ SystemScores FEAT_Tuner::normalize(SystemScores &origin_score) {
   return origin_score;
 }
 
-
 TuningOP FEAT_Tuner::TuneByTEA() {
   // the flushing speed is low.
   TuningOP result{kKeep, kKeep};
 
-  if (current_score_.estimate_compaction_bytes > 0.8) {
+  if (current_score_.compaction_idle_time > idle_threshold * tuning_gap) {
+    result.ThreadOp = kHalf;
+  }
+
+  if (current_score_.estimate_compaction_bytes > 1) {
     result.ThreadOp = kLinearIncrease;
   }
 
-  if (current_score_.l0_num > 0.8) result.ThreadOp = kLinearIncrease;
+  if (current_score_.l0_num > 1) result.ThreadOp = kLinearIncrease;
 
   if (current_score_.flush_speed_avg <=
           max_scores.flush_speed_avg * TEA_slow_flush &&
@@ -388,17 +392,29 @@ TuningOP FEAT_Tuner::TuneByTEA() {
 TuningOP FEAT_Tuner::TuneByFEA() {
   TuningOP negative_protocol{kKeep, kKeep};
 
+  if (max_scores.memtable_speed != 0) {
+    double estimate_gap = (double)(current_opt.write_buffer_size >> 20) /
+                          max_scores.memtable_speed;
+    if (estimate_gap > FEA_gap_threshold * tuning_gap) {
+      negative_protocol.BatchOp = kHalf;
+    }
+  }
+
   if (current_score_.immutable_number > 1) {
     negative_protocol.BatchOp = kLinearIncrease;
   }
 
-//  if (current_score_.memtable_speed + current_score_.active_size_ratio >
-//          current_opt.write_buffer_size &&
-//      current_score_.immutable_number == 1) {
-//    negative_protocol.BatchOp = kDouble;
-//  }
+  //  if (current_score_.memtable_speed + current_score_.active_size_ratio >
+  //          current_opt.write_buffer_size &&
+  //      current_score_.immutable_number == 1) {
+  //    negative_protocol.BatchOp = kDouble;
+  //  }
 
-  if (current_score_.estimate_compaction_bytes > 0.8 || current_score_.l0_num > 0.8) {
+  if (current_score_.estimate_compaction_bytes > 1) {
+    negative_protocol.BatchOp = kLinearIncrease;
+  }
+
+  if (current_score_.l0_num > 1) {
     negative_protocol.BatchOp = kHalf;
   }
 

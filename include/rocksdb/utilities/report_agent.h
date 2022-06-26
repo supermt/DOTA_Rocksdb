@@ -151,6 +151,7 @@ class ReporterAgentWithTuning : public ReporterAgent {
   uint64_t last_flush_thread_len;
   std::map<std::string, void*> string_to_attributes_map;
   std::unique_ptr<DOTA_Tuner> tuner;
+  bool applying_changes;
   static std::string DOTAHeader() {
     return "secs_elapsed,interval_qps,batch_size,thread_num";
   }

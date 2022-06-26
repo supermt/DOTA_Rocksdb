@@ -30,6 +30,9 @@ Status ReporterAgent::ReportLine(int secs_elapsed,
 
 void ReporterAgentWithTuning::DetectChangesPoints(int sec_elapsed) {
   std::vector<ChangePoint> change_points;
+  if (applying_changes) {
+    return;
+  }
   tuner->DetectTuningOperations(sec_elapsed, &change_points);
   ApplyChangePointsInstantly(&change_points);
 }
@@ -69,18 +72,22 @@ void ReporterAgentWithTuning::UseFEATTuner(bool TEA_enable, bool FEA_enable) {
 Status update_db_options(
     DBImpl* running_db_,
     std::unordered_map<std::string, std::string>* new_db_options,
-    Env* /*env*/) {
+    bool* applying_changes, Env* /*env*/) {
+  *applying_changes = true;
   Status s = running_db_->SetDBOptions(*new_db_options);
   free(new_db_options);
+  *applying_changes = false;
   return s;
 }
 
 Status update_cf_options(
     DBImpl* running_db_,
     std::unordered_map<std::string, std::string>* new_cf_options,
-    Env* /*env*/) {
+    bool* applying_changes, Env* /*env*/) {
+  *applying_changes = true;
   Status s = running_db_->SetOptions(*new_cf_options);
   free(new_cf_options);
+  *applying_changes = false;
   return s;
 }
 
@@ -118,11 +125,13 @@ void ReporterAgentWithTuning::ApplyChangePointsInstantly(
   Status s;
   if (!new_db_options->empty()) {
     //    std::thread t();
-    std::thread t(update_db_options, running_db_, new_db_options, env_);
+    std::thread t(update_db_options, running_db_, new_db_options,
+                  &applying_changes, env_);
     t.detach();
   }
   if (!new_cf_options->empty()) {
-    std::thread t(update_cf_options, running_db_, new_cf_options, env_);
+    std::thread t(update_cf_options, running_db_, new_cf_options,
+                  &applying_changes, env_);
     t.detach();
   }
 }
@@ -149,6 +158,7 @@ ReporterAgentWithTuning::ReporterAgentWithTuning(DBImpl* running_db, Env* env,
   tuner.reset(new DOTA_Tuner(options_when_boost, running_db_, &last_report_,
                              &total_ops_done_, env_, tuning_gap_secs_));
   tuner->ResetTuner();
+  this->applying_changes = false;
 }
 
 inline double average(std::vector<double>& v) {
@@ -185,7 +195,7 @@ Status ReporterAgentWithSILK::ReportLine(int secs_elapsed,
 
   // SILK TESTING the Pause compaction work functionality
   if (!pausedcompaction &&
-      cur_bandwidth_user_ops_MBPS > FLAGS_SILK_bandwidth_limitation*0.75) {
+      cur_bandwidth_user_ops_MBPS > FLAGS_SILK_bandwidth_limitation * 0.75) {
     // SILK Consider this a load peak
     //    running_db_->PauseCompactionWork();
     //    pausedcompaction = true;
@@ -193,7 +203,8 @@ Status ReporterAgentWithSILK::ReportLine(int secs_elapsed,
     std::thread t(SILK_pause_compaction, running_db_, &pausedcompaction);
     t.detach();
 
-  } else if (pausedcompaction && cur_bandwidth_user_ops_MBPS <= FLAGS_SILK_bandwidth_limitation*0.75) {
+  } else if (pausedcompaction && cur_bandwidth_user_ops_MBPS <=
+                                     FLAGS_SILK_bandwidth_limitation * 0.75) {
     std::thread t(SILK_resume_compaction, running_db_, &pausedcompaction);
     t.detach();
   }
