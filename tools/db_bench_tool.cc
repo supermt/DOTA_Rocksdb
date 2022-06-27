@@ -3627,6 +3627,7 @@ class Benchmark {
         fresh_db = true;
         method = &Benchmark::TimeSeries;
       } else if (name == "stats") {
+        fresh_db = false;
         PrintStats("rocksdb.stats");
       } else if (name == "resetstats") {
         ResetStats();
@@ -7927,6 +7928,7 @@ class Benchmark {
   }
 
   void PrintStats(DB* db, const char* key, bool print_header = false) {
+    assert(db != nullptr);
     if (print_header) {
       fprintf(stdout, "\n==== DB: %s ===\n", db->GetName().c_str());
     }
