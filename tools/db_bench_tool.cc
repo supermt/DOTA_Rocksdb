@@ -6574,7 +6574,6 @@ class Benchmark {
       uint64_t now = FLAGS_env->NowMicros();
       if (now - last_report > kMicrosInSecond) {
         uint64_t sec = (now - start) / kMicrosInSecond;
-        std::cout << sec;
         uint64_t target_speed = FLAGS_random_fill_average * 10000 *
                                 bandwidth_in_one_hour[sec % 3600];
         write_rate_limiter.reset(
