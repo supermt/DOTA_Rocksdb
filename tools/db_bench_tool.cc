@@ -632,6 +632,7 @@ DEFINE_string(change_points, "",
 // auto-tuner related options
 
 DEFINE_string(ycsb_workload, "", "The workload of YCSB");
+DEFINE_int64(ycsb_request_speed, 100, "The request speed of YCSB, in MB/s");
 DEFINE_int64(load_num, 100000, "Num of operations in loading phrase");
 DEFINE_int64(running_num, 100000, "Num of operations in running phrase");
 DEFINE_int64(core_num, 20, "The limit of thread number");
@@ -3537,6 +3538,10 @@ class Benchmark {
         num_threads++;
         fresh_db = true;
         method = &Benchmark::BGMixgraph;
+      } else if (name == "bgYCSBrun") {
+        num_threads++;
+        fresh_db = true;
+        method = &Benchmark::BGYCSBRun;
       } else if (name == "readmissing") {
         ++key_size_;
         method = &Benchmark::ReadRandom;
@@ -5051,6 +5056,12 @@ class Benchmark {
     int remain_running = FLAGS_running_num;
     const int test_duration = FLAGS_duration;
     int64_t ops_per_stage = 1;
+    std::unique_ptr<RateLimiter> ycsb_write_rate_limiter;
+
+    if (FLAGS_ycsb_request_speed > 0) {
+      ycsb_write_rate_limiter.reset(
+          NewGenericRateLimiter(FLAGS_random_fill_average << 20));
+    }
 
     // load first, then run
     Duration loading_duration(0, remain_loading, ops_per_stage);
@@ -5133,6 +5144,12 @@ class Benchmark {
             Slice val = gen.Generate(FLAGS_value_size);
             // In rocksdb, update is just another put operation.
             op_status = db_.db->Put(w_op, key, val);
+            if (FLAGS_ycsb_request_speed > 0) {
+              ycsb_write_rate_limiter->Request(
+                  key.size() + val.size(), Env::IO_HIGH, nullptr /* stats */,
+                  RateLimiter::OpType::kWrite);
+            }
+
             thread->stats.FinishedOps(nullptr, db, entries_per_batch_, kUpdate);
           } break;
           case ycsbc::INSERT: {
@@ -5140,6 +5157,12 @@ class Benchmark {
             // In rocksdb, update is just another put operation.
             op_status = db_.db->Put(w_op, key, val);
             thread->stats.FinishedOps(nullptr, db, entries_per_batch_, kWrite);
+            if (FLAGS_ycsb_request_speed > 0) {
+              ycsb_write_rate_limiter->Request(
+                  key.size() + val.size(), Env::IO_HIGH, nullptr /* stats */,
+                  RateLimiter::OpType::kWrite);
+            }
+
           } break;
           case ycsbc::SCAN: {
             Iterator* db_iter = db_.db->NewIterator(rocksdb::ReadOptions());
@@ -6574,7 +6597,6 @@ class Benchmark {
       uint64_t now = FLAGS_env->NowMicros();
       if (now - last_report > kMicrosInSecond) {
         uint64_t sec = (now - start) / kMicrosInSecond;
-        std::cout << sec;
         uint64_t target_speed = FLAGS_random_fill_average * 10000 *
                                 bandwidth_in_one_hour[sec % 3600];
         write_rate_limiter.reset(
@@ -6628,6 +6650,14 @@ class Benchmark {
                                   RateLimiter::OpType::kWrite);
     }
     thread->stats.AddBytes(bytes);
+  }
+
+  void BGYCSBRun(ThreadState* thread) {
+    if (thread->tid > 0) {
+      YCSBRunner(thread);
+    } else {
+      BurstWritten(thread, kWrite);
+    }
   }
 
   void BGMixgraph(ThreadState* thread) {
