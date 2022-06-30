@@ -145,6 +145,7 @@ SystemScores DOTA_Tuner::ScoreTheSystem() {
   // l0_num
   current_score.l0_num = (double)(vfs->NumLevelFiles(vfs->base_level())) /
                          current_opt.level0_slowdown_writes_trigger;
+  current_score.l0_num = l0_compaction == 0 ? current_score.l0_num : 0;
   // disk bandwidth,estimate_pending_bytes ratio
   current_score.disk_bandwidth /= kMicrosInSecond;
   current_score.estimate_compaction_bytes =
@@ -416,9 +417,9 @@ TuningOP FEAT_Tuner::TuneByFEA() {
   if (esitmate_gap > FEA_gap_threshold * tuning_gap) {
     negative_protocol.BatchOp = kHalf;
   }
-  if (current_score_.immutable_number > 1) {
-    negative_protocol.BatchOp = kLinearIncrease;
-  }
+  //  if (current_score_.immutable_number > 1) {
+  //    negative_protocol.BatchOp = kLinearIncrease;
+  //  }
 
   if (current_score_.memtable_speed + current_score_.active_size_ratio >
           current_opt.write_buffer_size &&
