@@ -387,22 +387,19 @@ SystemScores FEAT_Tuner::normalize(SystemScores &origin_score) {
 TuningOP FEAT_Tuner::TuneByTEA() {
   // the flushing speed is low.
   TuningOP result{kKeep, kKeep};
-  if (current_score_.memtable_speed < max_scores.memtable_speed * 0.5) {
-    if (current_score_.estimate_compaction_bytes > 0.8) {
-      result.ThreadOp = kLinearIncrease;
-    }
 
-    if (current_score_.l0_num > 0.8) result.ThreadOp = kLinearIncrease;
+  if (current_score_.compaction_idle_time > idle_threshold * tuning_gap) {
+    result.ThreadOp = kHalf;
+  }
 
-    if (current_score_.immutable_number >= 1) {
-      if (current_score_.flush_speed_avg <= max_scores.flush_speed_avg * 0.5) {
-        result.ThreadOp = kHalf;
-      }
-    }
-
-  } else if (current_score_.estimate_compaction_bytes > 0.8) {
+  if (current_score_.estimate_compaction_bytes > 0.8) {
     result.ThreadOp = kLinearIncrease;
-  } else if (current_score_.compaction_idle_time > idle_threshold) {
+  }
+
+  if (current_score_.l0_num > 0.8) result.ThreadOp = kLinearIncrease;
+
+  if (current_score_.flush_speed_avg <= max_scores.flush_speed_avg * 0.5 &&
+      current_score_.flush_speed_avg != 0) {
     result.ThreadOp = kHalf;
   }
 
@@ -429,7 +426,8 @@ TuningOP FEAT_Tuner::TuneByFEA() {
     negative_protocol.BatchOp = kLinearIncrease;
   }
   if (current_score_.l0_num > 1) negative_protocol.BatchOp = kLinearIncrease;
-  if (current_score_.estimate_compaction_bytes > 0.8) {
+
+  if (current_score_.estimate_compaction_bytes > 1) {
     negative_protocol.BatchOp = kLinearIncrease;
   }
 
