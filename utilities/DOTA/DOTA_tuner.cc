@@ -230,7 +230,6 @@ inline void DOTA_Tuner::SetThreadNum(std::vector<ChangePoint> *change_list,
   ChangePoint thread_num_cp;
   thread_num_cp.opt = max_bg_jobs;
   thread_num_cp.db_width = true;
-  if (target_value == min_thread || target_value == max_thread) return;
   target_value = std::max(target_value, min_thread);
   target_value = std::min(target_value, max_thread);
   thread_num_cp.value = ToString(target_value);
@@ -243,13 +242,23 @@ inline void DOTA_Tuner::SetBatchSize(std::vector<ChangePoint> *change_list,
   memtable_size_cp.db_width = false;
   memtable_size_cp.opt = memtable_size;
 
-  if (target_value == min_memtable_size || target_value == max_memtable_size)
-    return;
-
   ChangePoint sst_size;
+  int flush_slots = std::ceil((double)current_opt.max_background_jobs / 5);
+  ChangePoint write_buffer_number;
+  write_buffer_number.opt = memtable_number;
+  write_buffer_number.db_width = false;
+  uint64_t allowed_max_memtable_size;
+  write_buffer_number.value = ToString(flush_slots + 1);
+  allowed_max_memtable_size =
+      ((max_memtable_size * default_opts.max_write_buffer_number) >> 20) /
+      (flush_slots + 1);
+
+  std::cout << allowed_max_memtable_size << std::endl;
+  allowed_max_memtable_size = allowed_max_memtable_size << 20;
+
   sst_size.opt = table_size;
   target_value = std::max(target_value, min_memtable_size);
-  target_value = std::min(target_value, max_memtable_size);
+  target_value = std::min(target_value, allowed_max_memtable_size);
   memtable_size_cp.value = ToString(target_value);
   sst_size.value = ToString(target_value);
   ChangePoint L1_total_size;
@@ -261,6 +270,8 @@ inline void DOTA_Tuner::SetBatchSize(std::vector<ChangePoint> *change_list,
   L1_total_size.value = ToString(l1_size);
   sst_size.db_width = false;
   L1_total_size.db_width = false;
+
+  change_list->push_back(write_buffer_number);
   change_list->push_back(memtable_size_cp);
   change_list->push_back(L1_total_size);
   change_list->push_back(sst_size);
@@ -369,20 +380,22 @@ SystemScores FEAT_Tuner::normalize(SystemScores &origin_score) {
 TuningOP FEAT_Tuner::TuneByTEA() {
   // the flushing speed is low.
   TuningOP result{kKeep, kKeep};
+  if (current_score_.memtable_speed < max_scores.memtable_speed * 0.5) {
+    if (current_score_.estimate_compaction_bytes > 0.8) {
+      result.ThreadOp = kLinearIncrease;
+    }
 
-  if (current_score_.compaction_idle_time > idle_threshold * tuning_gap) {
-    result.ThreadOp = kHalf;
-  }
+    if (current_score_.l0_num > 0.8) result.ThreadOp = kLinearIncrease;
 
-  if (current_score_.estimate_compaction_bytes > 1) {
+    if (current_score_.immutable_number >= 1) {
+      if (current_score_.flush_speed_avg <= max_scores.flush_speed_avg * 0.5) {
+        result.ThreadOp = kHalf;
+      }
+    }
+
+  } else if (current_score_.estimate_compaction_bytes > 0.8) {
     result.ThreadOp = kLinearIncrease;
-  }
-
-  if (current_score_.l0_num > 1) result.ThreadOp = kLinearIncrease;
-
-  if (current_score_.flush_speed_avg <=
-          max_scores.flush_speed_avg * TEA_slow_flush &&
-      current_score_.flush_speed_avg != 0) {
+  } else if (current_score_.compaction_idle_time > idle_threshold) {
     result.ThreadOp = kHalf;
   }
 
@@ -392,30 +405,25 @@ TuningOP FEAT_Tuner::TuneByTEA() {
 TuningOP FEAT_Tuner::TuneByFEA() {
   TuningOP negative_protocol{kKeep, kKeep};
 
-  if (max_scores.memtable_speed != 0) {
-    double estimate_gap = (double)(current_opt.write_buffer_size >> 20) /
-                          max_scores.memtable_speed;
-    if (estimate_gap > FEA_gap_threshold * tuning_gap) {
-      negative_protocol.BatchOp = kHalf;
-    }
-  }
+  float esitmate_gap = current_score_.active_size_ratio *
+                       (current_opt.write_buffer_size >> 20) /
+                       current_score_.memtable_speed;
 
+  if (esitmate_gap > FEA_gap_threshold * tuning_gap) {
+    negative_protocol.BatchOp = kHalf;
+  }
   if (current_score_.immutable_number > 1) {
     negative_protocol.BatchOp = kLinearIncrease;
   }
 
-  //  if (current_score_.memtable_speed + current_score_.active_size_ratio >
-  //          current_opt.write_buffer_size &&
-  //      current_score_.immutable_number == 1) {
-  //    negative_protocol.BatchOp = kDouble;
-  //  }
-
-  if (current_score_.estimate_compaction_bytes > 1) {
+  if (current_score_.memtable_speed + current_score_.active_size_ratio >
+          current_opt.write_buffer_size &&
+      current_score_.immutable_number == 1) {
     negative_protocol.BatchOp = kLinearIncrease;
   }
-
-  if (current_score_.l0_num > 1) {
-    negative_protocol.BatchOp = kHalf;
+  if (current_score_.l0_num > 1) negative_protocol.BatchOp = kLinearIncrease;
+  if (current_score_.estimate_compaction_bytes > 0.8) {
+    negative_protocol.BatchOp = kLinearIncrease;
   }
 
   return negative_protocol;

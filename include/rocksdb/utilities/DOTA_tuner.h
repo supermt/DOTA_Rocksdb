@@ -120,7 +120,8 @@ class DOTA_Tuner {
 
  public:
   DOTA_Tuner(const Options opt, DBImpl* running_db, int64_t* last_report_op_ptr,
-             std::atomic<int64_t>* total_ops_done_ptr, Env* env, uint64_t gap_sec)
+             std::atomic<int64_t>* total_ops_done_ptr, Env* env,
+             uint64_t gap_sec)
       : default_opts(opt),
         tuning_rounds(0),
         running_db_(running_db),
@@ -149,7 +150,7 @@ class DOTA_Tuner {
   void set_gap_threshold(double ng_threshold) {
     FEA_gap_threshold = ng_threshold;
   }
-  void set_slow_flush_threshold(double sf_threshold){
+  void set_slow_flush_threshold(double sf_threshold) {
     this->TEA_slow_flush = sf_threshold;
   }
   virtual ~DOTA_Tuner();
@@ -172,7 +173,7 @@ class DOTA_Tuner {
     }
 
     if (0 == max_scores.flush_speed_avg) {
-    //    if (current_score.flush_speed_avg > max_scores.flush_speed_avg) {
+      //    if (current_score.flush_speed_avg > max_scores.flush_speed_avg) {
       max_scores.flush_speed_avg = current_score.flush_speed_avg;
     }
     if (current_score.flush_speed_var > max_scores.flush_speed_var) {
@@ -230,6 +231,7 @@ class DOTA_Tuner {
   const std::string memtable_size = "write_buffer_size";
   const std::string table_size = "target_file_size_base";
   const std::string max_bg_jobs = "max_background_jobs";
+  const std::string memtable_number = "max_write_buffer_number";
 
   const int core_num;
   int max_thread = core_num;
@@ -254,8 +256,7 @@ class FEAT_Tuner : public DOTA_Tuner {
  public:
   FEAT_Tuner(const Options opt, DBImpl* running_db, int64_t* last_report_op_ptr,
              std::atomic<int64_t>* total_ops_done_ptr, Env* env, int gap_sec,
-             bool triggerTEA,
-             bool triggerFEA)
+             bool triggerTEA, bool triggerFEA)
       : DOTA_Tuner(opt, running_db, last_report_op_ptr, total_ops_done_ptr, env,
                    gap_sec),
         TEA_enable(triggerTEA),
@@ -266,9 +267,8 @@ class FEAT_Tuner : public DOTA_Tuner {
 
     std::cout << "Using FEAT tuner.\n FEA is "
               << (FEA_enable ? "triggered" : "NOT triggered") << std::endl;
-    std::cout << "TEA is "
-              << (TEA_enable ? "triggered" : "NOT triggered") << std::endl;
-
+    std::cout << "TEA is " << (TEA_enable ? "triggered" : "NOT triggered")
+              << std::endl;
   }
   void DetectTuningOperations(int secs_elapsed,
                               std::vector<ChangePoint>* change_list) override;
