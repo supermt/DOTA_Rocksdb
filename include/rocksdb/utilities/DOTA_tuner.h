@@ -229,7 +229,8 @@ class DOTA_Tuner {
   BatchSizeStallLevels LocateBatchStates(SystemScores& score);
 
   const std::string memtable_size = "write_buffer_size";
-  const std::string table_size = "target_file_size_base";
+  const std::string sst_size = "target_file_size_base";
+  const std::string total_l1_size = "max_bytes_for_level_base";
   const std::string max_bg_jobs = "max_background_jobs";
   const std::string memtable_number = "max_write_buffer_number";
 

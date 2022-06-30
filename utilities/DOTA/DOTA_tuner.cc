@@ -239,42 +239,49 @@ inline void DOTA_Tuner::SetThreadNum(std::vector<ChangePoint> *change_list,
 inline void DOTA_Tuner::SetBatchSize(std::vector<ChangePoint> *change_list,
                                      uint64_t target_value) {
   ChangePoint memtable_size_cp;
+  ChangePoint L1_total_size;
+  ChangePoint sst_size_cp;
+
+  sst_size_cp.opt = sst_size;
+  L1_total_size.opt = total_l1_size;
+  // adjust the memtable size
   memtable_size_cp.db_width = false;
   memtable_size_cp.opt = memtable_size;
 
-  ChangePoint sst_size;
   int flush_slots = std::ceil((double)current_opt.max_background_jobs / 5);
   ChangePoint write_buffer_number;
   write_buffer_number.opt = memtable_number;
   write_buffer_number.db_width = false;
   uint64_t allowed_max_memtable_size;
+  // adjust the number of memtable size, and controls the total size of Cm won't
+  // exceed
   write_buffer_number.value = ToString(flush_slots + 1);
   allowed_max_memtable_size =
       ((max_memtable_size * default_opts.max_write_buffer_number) >> 20) /
       (flush_slots + 1);
 
-  std::cout << allowed_max_memtable_size << std::endl;
   allowed_max_memtable_size = allowed_max_memtable_size << 20;
 
-  sst_size.opt = table_size;
   target_value = std::max(target_value, min_memtable_size);
   target_value = std::min(target_value, allowed_max_memtable_size);
-  memtable_size_cp.value = ToString(target_value);
-  sst_size.value = ToString(target_value);
-  ChangePoint L1_total_size;
-  L1_total_size.opt = table_size;
 
+  // SST sizes should be controlled to be the same as memtable size
+  memtable_size_cp.value = ToString(target_value);
+  sst_size_cp.value = ToString(target_value);
+
+  // calculate the total size of L1
   uint64_t l1_size = current_opt.level0_file_num_compaction_trigger *
                      current_opt.min_write_buffer_number_to_merge *
                      target_value;
+
   L1_total_size.value = ToString(l1_size);
-  sst_size.db_width = false;
+  sst_size_cp.db_width = false;
   L1_total_size.db_width = false;
 
   change_list->push_back(write_buffer_number);
   change_list->push_back(memtable_size_cp);
   change_list->push_back(L1_total_size);
-  change_list->push_back(sst_size);
+  change_list->push_back(sst_size_cp);
 }
 
 void DOTA_Tuner::FillUpChangeList(std::vector<ChangePoint> *change_list,
