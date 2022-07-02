@@ -331,6 +331,45 @@ SystemScores SystemScores::operator-(const SystemScores &a) {
 
   return temp;
 }
+
+SystemScores SystemScores::operator+(const SystemScores &a) {
+  SystemScores temp;
+
+  temp.memtable_speed = this->memtable_speed + a.memtable_speed;
+  temp.active_size_ratio = this->active_size_ratio + a.active_size_ratio;
+  temp.immutable_number = this->immutable_number + a.immutable_number;
+  temp.flush_speed_avg = this->flush_speed_avg + a.flush_speed_avg;
+  temp.flush_speed_var = this->flush_speed_var + a.flush_speed_var;
+  temp.l0_num = this->l0_num + a.l0_num;
+  temp.l0_drop_ratio = this->l0_drop_ratio + a.l0_drop_ratio;
+  temp.estimate_compaction_bytes =
+      this->estimate_compaction_bytes + a.estimate_compaction_bytes;
+  temp.disk_bandwidth = this->disk_bandwidth + a.disk_bandwidth;
+  temp.compaction_idle_time =
+      this->compaction_idle_time + a.compaction_idle_time;
+  temp.flush_idle_time = this->flush_idle_time + a.flush_idle_time;
+
+  return temp;
+}
+
+SystemScores SystemScores::operator/(const int &a) {
+  SystemScores temp;
+
+  temp.memtable_speed = this->memtable_speed / a;
+  temp.active_size_ratio = this->active_size_ratio / a;
+  temp.immutable_number = this->immutable_number / a;
+  temp.flush_speed_avg = this->flush_speed_avg / a;
+  temp.flush_speed_var = this->flush_speed_var / a;
+  temp.l0_num = this->l0_num / a;
+  temp.l0_drop_ratio = this->l0_drop_ratio / a;
+  temp.estimate_compaction_bytes = this->estimate_compaction_bytes / a;
+  temp.disk_bandwidth = this->disk_bandwidth / a;
+  temp.compaction_idle_time = this->compaction_idle_time / a;
+  temp.flush_idle_time = this->flush_idle_time / a;
+
+  return temp;
+}
+
 FEAT_Tuner::~FEAT_Tuner() = default;
 
 void FEAT_Tuner::DetectTuningOperations(int /*secs_elapsed*/,

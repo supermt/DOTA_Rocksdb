@@ -25,7 +25,7 @@ enum BatchSizeStallLevels : int {
 
 struct SystemScores {
   // Memory Component
-  uint64_t memtable_speed;   // MB per sec
+  uint64_t  memtable_speed;   // MB per sec
   double active_size_ratio;  // active size / total memtable size
   int immutable_number;      // NonFlush number
   // Flushing
@@ -71,6 +71,8 @@ struct SystemScores {
     flush_numbers = 0;
   }
   SystemScores operator-(const SystemScores& a);
+  SystemScores operator+(const SystemScores& a);
+  SystemScores operator/(const int& a);
 };
 
 typedef SystemScores ScoreGradient;
