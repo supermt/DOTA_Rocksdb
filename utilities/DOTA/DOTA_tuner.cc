@@ -239,6 +239,7 @@ inline void DOTA_Tuner::SetBatchSize(std::vector<ChangePoint> *change_list,
   ChangePoint memtable_size_cp;
   ChangePoint L1_total_size;
   ChangePoint sst_size_cp;
+  ChangePoint write_buffer_number;
 
   sst_size_cp.opt = sst_size;
   L1_total_size.opt = total_l1_size;
@@ -246,22 +247,22 @@ inline void DOTA_Tuner::SetBatchSize(std::vector<ChangePoint> *change_list,
   memtable_size_cp.db_width = false;
   memtable_size_cp.opt = memtable_size;
 
-  int flush_slots = std::ceil((double)current_opt.max_background_jobs / 5);
-  ChangePoint write_buffer_number;
-  write_buffer_number.opt = memtable_number;
-  write_buffer_number.db_width = false;
-  uint64_t allowed_max_memtable_size;
+//  int flush_slots = std::ceil((double)current_opt.max_background_jobs / 5);
+
+  //  write_buffer_number.opt = memtable_number;
+  //  write_buffer_number.db_width = false;
+  //  uint64_t allowed_max_memtable_size;
   // adjust the number of memtable size, and controls the total size of Cm won't
   // exceed
-  write_buffer_number.value = ToString(flush_slots + 1);
-  allowed_max_memtable_size =
-      ((max_memtable_size * default_opts.max_write_buffer_number) >> 20) /
-      (flush_slots + 1);
-
-  allowed_max_memtable_size = allowed_max_memtable_size << 20;
+  //  write_buffer_number.value = ToString(flush_slots + 1);
+  //  allowed_max_memtable_size =
+  //      ((max_memtable_size * default_opts.max_write_buffer_number) >> 20) /
+  //      (flush_slots + 1);
+  //
+  //  allowed_max_memtable_size = allowed_max_memtable_size << 20;
 
   target_value = std::max(target_value, min_memtable_size);
-  target_value = std::min(target_value, allowed_max_memtable_size);
+  target_value = std::min(target_value, max_memtable_size);
 
   // SST sizes should be controlled to be the same as memtable size
   memtable_size_cp.value = ToString(target_value);
@@ -276,7 +277,7 @@ inline void DOTA_Tuner::SetBatchSize(std::vector<ChangePoint> *change_list,
   sst_size_cp.db_width = false;
   L1_total_size.db_width = false;
 
-  change_list->push_back(write_buffer_number);
+  //  change_list->push_back(write_buffer_number);
   change_list->push_back(memtable_size_cp);
   change_list->push_back(L1_total_size);
   change_list->push_back(sst_size_cp);
@@ -387,7 +388,7 @@ void FEAT_Tuner::DetectTuningOperations(int /*secs_elapsed*/,
   current_score_ = current_score;
   if (current_score_.memtable_speed ==0 ){//< max_scores.memtable_speed * 0.5) {
     std::cout << current_score_.memtable_speed << "/" << max_scores.memtable_speed << std::endl;
-    TuningOP result{kKeep, kKeep};
+   TuningOP result{kKeep, kKeep};
     if (TEA_enable) {
       result = TuneByTEA();
     }
@@ -405,8 +406,7 @@ SystemScores FEAT_Tuner::normalize(SystemScores &origin_score) {
 
 TuningOP FEAT_Tuner::TuneByTEA() {
   // the flushing speed is low.
-  TuningOP result{kLinearIncrease, kLinearIncrease};
-
+  TuningOP result{kKeep, kLinearIncrease};
   if (current_score_.compaction_idle_time > idle_threshold) {
     result.ThreadOp = kHalf;
   }
@@ -418,7 +418,7 @@ TuningOP FEAT_Tuner::TuneByTEA() {
   if (current_score_.l0_num >= 1) result.ThreadOp = kLinearIncrease;
 
   if (current_score_.flush_speed_avg <= max_scores.flush_speed_avg * TEA_slow_flush &&
-      current_score_.flush_speed_avg != 0) {
+     current_score_.flush_speed_avg != 0) {
     result.ThreadOp = kHalf;
   }
   std::cout << current_score_.flush_speed_avg << "/" << max_scores.flush_speed_avg << "/"<<result.ThreadOp << std::endl;
@@ -426,7 +426,7 @@ TuningOP FEAT_Tuner::TuneByTEA() {
 }
 
 TuningOP FEAT_Tuner::TuneByFEA() {
-  TuningOP negative_protocol{kKeep, kKeep};
+  TuningOP negative_protocol{kHalf, kKeep};
 
   // if the variance of the flush speed is very large, we should consider cut
   // down the Batch size
@@ -435,9 +435,9 @@ TuningOP FEAT_Tuner::TuneByFEA() {
   //            << current_score_.flush_speed_var << std::endl;
   //  std::cout << "flush idle time:" << current_score_.flush_idle_time
   //            << std::endl;
-  if (current_score_.flush_speed_var > current_score_.flush_speed_avg) {
-    negative_protocol.BatchOp = kHalf;
-  }
+  //  if (current_score_.flush_speed_var > current_score_.flush_speed_avg) {
+  //    negative_protocol.BatchOp = kHalf;
+  //  }
   if (current_score_.immutable_number > 1) {
     negative_protocol.BatchOp = kLinearIncrease;
   }
