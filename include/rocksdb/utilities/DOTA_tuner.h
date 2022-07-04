@@ -309,6 +309,7 @@ class FEAT_Tuner : public DOTA_Tuner {
     }
     return "unknown operation";
   }
+  void CalculateAvgScore();
 };
 inline const char* OpString(OpType v) {
   switch (v) {

@@ -247,7 +247,7 @@ inline void DOTA_Tuner::SetBatchSize(std::vector<ChangePoint> *change_list,
   memtable_size_cp.db_width = false;
   memtable_size_cp.opt = memtable_size;
 
-//  int flush_slots = std::ceil((double)current_opt.max_background_jobs / 5);
+  //  int flush_slots = std::ceil((double)current_opt.max_background_jobs / 5);
 
   //  write_buffer_number.opt = memtable_number;
   //  write_buffer_number.db_width = false;
@@ -384,11 +384,16 @@ void FEAT_Tuner::DetectTuningOperations(int /*secs_elapsed*/,
     // remove the first record
     scores.pop_front();
   }
+  CalculateAvgScore();
 
   current_score_ = current_score;
-  if (current_score_.memtable_speed ==0 ){//< max_scores.memtable_speed * 0.5) {
-    std::cout << current_score_.memtable_speed << "/" << max_scores.memtable_speed << std::endl;
-   TuningOP result{kKeep, kKeep};
+  if (current_score_.memtable_speed <=
+      avg_scores.memtable_speed * TEA_slow_flush) {
+    std::cout << current_score_.memtable_speed << "/"
+              << avg_scores.memtable_speed << std::endl;
+    TuningOP result{kKeep, kKeep};
+    std::cout << current_score_.flush_idle_time << std::endl;
+    std::cout << current_score_.compaction_idle_time << std::endl;
     if (TEA_enable) {
       result = TuneByTEA();
     }
@@ -417,19 +422,25 @@ TuningOP FEAT_Tuner::TuneByTEA() {
 
   if (current_score_.l0_num >= 1) result.ThreadOp = kLinearIncrease;
 
-  if (current_score_.flush_speed_avg <= max_scores.flush_speed_avg * TEA_slow_flush &&
-     current_score_.flush_speed_avg != 0) {
+  if (current_score_.flush_speed_avg <=
+          avg_scores.flush_speed_avg * TEA_slow_flush &&
+      current_score_.flush_speed_avg != 0) {
     result.ThreadOp = kHalf;
   }
-  std::cout << current_score_.flush_speed_avg << "/" << max_scores.flush_speed_avg << "/"<<result.ThreadOp << std::endl;
+  //  std::cout << current_score_.flush_speed_avg << "/" <<
+  //  max_scores.flush_speed_avg << "/"<<result.ThreadOp << std::endl;
   return result;
 }
 
 TuningOP FEAT_Tuner::TuneByFEA() {
-  TuningOP negative_protocol{kHalf, kKeep};
+  TuningOP negative_protocol{kKeep, kKeep};
 
   // if the variance of the flush speed is very large, we should consider cut
   // down the Batch size
+
+  if (current_score_.flush_idle_time > 2) {
+    negative_protocol.BatchOp = kHalf;
+  }
 
   //  std::cout << "flush variance:" << current_score_.flush_speed_avg << "\t"
   //            << current_score_.flush_speed_var << std::endl;
@@ -454,6 +465,14 @@ TuningOP FEAT_Tuner::TuneByFEA() {
   }
 
   return negative_protocol;
+}
+void FEAT_Tuner::CalculateAvgScore() {
+  SystemScores result;
+  for (auto score : scores) {
+    result = result + score;
+  }
+  if (scores.size() > 0) result = result / scores.size();
+  avg_scores = result;
 }
 
 }  // namespace ROCKSDB_NAMESPACE
