@@ -451,8 +451,10 @@ Status FlushJob::WriteLevel0Table() {
   metrics.l0_files = vfs->NumLevelFiles(vfs->base_level());
   metrics.memtable_ratio /= mems_.size();
   metrics.write_out_bandwidth = stats.bytes_written / stats.micros;
-
+  metrics.flush_gap = (double)stats.micros / kMicrosInSecond;
   db_options_.flush_stats->push_back(metrics);
+
+
   RecordFlushIOStats();
   return s;
 }

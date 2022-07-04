@@ -40,6 +40,7 @@ struct SystemScores {
   // System metrics
   double disk_bandwidth;  // avg
   double flush_idle_time;
+  double flush_gap_time;
   double compaction_idle_time;  // calculate by idle calculating,flush and
                                 // compaction stats separately
   int flush_numbers;
@@ -56,6 +57,7 @@ struct SystemScores {
     disk_bandwidth = 0.0;
     compaction_idle_time = 0.0;
     flush_numbers = 0;
+    flush_gap_time = 0;
   }
   void Reset() {
     memtable_speed = 0.0;
@@ -69,6 +71,7 @@ struct SystemScores {
     disk_bandwidth = 0.0;
     compaction_idle_time = 0.0;
     flush_numbers = 0;
+    flush_gap_time = 0;
   }
   SystemScores operator-(const SystemScores& a);
   SystemScores operator+(const SystemScores& a);
@@ -159,11 +162,12 @@ class DOTA_Tuner {
   virtual ~DOTA_Tuner();
 
   inline void UpdateMaxScore(SystemScores& current_score) {
-    if (!scores.empty() &&
-        current_score.memtable_speed > scores.front().memtable_speed * 2) {
-      // this would be an error
-      return;
-    }
+    //    if (!scores.empty() &&
+    //        current_score.memtable_speed > scores.front().memtable_speed * 2)
+    //        {
+    //      // this would be an error
+    //      return;
+    //    }
 
     if (current_score.memtable_speed > max_scores.memtable_speed) {
       max_scores.memtable_speed = current_score.memtable_speed;
@@ -175,8 +179,7 @@ class DOTA_Tuner {
       max_scores.immutable_number = current_score.immutable_number;
     }
 
-    if (0 == max_scores.flush_speed_avg) {
-      //    if (current_score.flush_speed_avg > max_scores.flush_speed_avg) {
+    if (current_score.flush_speed_avg > max_scores.flush_speed_avg) {
       max_scores.flush_speed_avg = current_score.flush_speed_avg;
     }
     if (current_score.flush_speed_var > max_scores.flush_speed_var) {
