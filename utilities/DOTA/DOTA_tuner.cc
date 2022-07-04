@@ -96,6 +96,7 @@ SystemScores DOTA_Tuner::ScoreTheSystem() {
     flush_metric_list.push_back(temp);
     current_score.flush_speed_avg += temp.write_out_bandwidth;
     current_score.disk_bandwidth += temp.total_bytes;
+    current_score.memtable_speed += temp.total_bytes;
     if (current_score.l0_num > temp.l0_files) {
       current_score.l0_num = temp.l0_files;
     }
@@ -104,12 +105,9 @@ SystemScores DOTA_Tuner::ScoreTheSystem() {
   auto num_new_flushes = (flush_result_length - flush_list_accessed);
   current_score.flush_numbers = num_new_flushes;
 
-  current_score.memtable_speed =
-      (current_score.flush_numbers * current_opt.write_buffer_size +
-       total_mem_size - last_unflushed_bytes) /
-      tuning_gap;
+  current_score.memtable_speed = current_score.memtable_speed / tuning_gap;
   current_score.memtable_speed /= kMicrosInSecond;  // we use MiB to calculate
-  last_unflushed_bytes = total_mem_size;
+
   uint64_t max_pending_bytes = 0;
 
   for (uint64_t i = compaction_list_accessed; i < compaction_result_length;
@@ -387,13 +385,12 @@ void FEAT_Tuner::DetectTuningOperations(int /*secs_elapsed*/,
   CalculateAvgScore();
 
   current_score_ = current_score;
+  //  std::cout << current_score_.memtable_speed << "/" <<
+  //  avg_scores.memtable_speed
+  //            << std::endl;
   if (current_score_.memtable_speed <=
       avg_scores.memtable_speed * TEA_slow_flush) {
-    std::cout << current_score_.memtable_speed << "/"
-              << avg_scores.memtable_speed << std::endl;
     TuningOP result{kKeep, kKeep};
-    std::cout << current_score_.flush_idle_time << std::endl;
-    std::cout << current_score_.compaction_idle_time << std::endl;
     if (TEA_enable) {
       result = TuneByTEA();
     }
@@ -438,7 +435,7 @@ TuningOP FEAT_Tuner::TuneByFEA() {
   // if the variance of the flush speed is very large, we should consider cut
   // down the Batch size
 
-  if (current_score_.flush_idle_time > 2) {
+  if (current_score_.flush_idle_time > idle_threshold) {
     negative_protocol.BatchOp = kHalf;
   }
 
