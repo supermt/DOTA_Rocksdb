@@ -103,11 +103,7 @@ SystemScores DOTA_Tuner::ScoreTheSystem() {
   int l0_compaction = 0;
   auto num_new_flushes = (flush_result_length - flush_list_accessed);
   current_score.flush_numbers = num_new_flushes;
-  //  current_score.memtable_speed =
-  //      (this->total_ops_done_ptr_->load() - *last_report_ptr) / tuning_gap;
-  // using op to calculate the memtable speed is not logical
-  // we use the flushed job * memtable size + active memtable size to measure
-  // it.
+
   current_score.memtable_speed =
       (current_score.flush_numbers * current_opt.write_buffer_size +
        total_mem_size - last_unflushed_bytes) /
@@ -115,6 +111,7 @@ SystemScores DOTA_Tuner::ScoreTheSystem() {
   current_score.memtable_speed /= kMicrosInSecond;  // we use MiB to calculate
   last_unflushed_bytes = total_mem_size;
   uint64_t max_pending_bytes = 0;
+
   for (uint64_t i = compaction_list_accessed; i < compaction_result_length;
        i++) {
     auto temp = compaction_list_from_opt_ptr->at(i);
@@ -382,21 +379,11 @@ void FEAT_Tuner::DetectTuningOperations(int /*secs_elapsed*/,
     return;
   }
   this->UpdateMaxScore(current_score);
-  normalize(current_score);
-  if (scores.size() >= DOTA_Tuner::score_array_len) {
+  if (scores.size() >= (size_t)this->score_array_len) {
     // remove the first record
     scores.pop_front();
   }
-  // if the flushing speed is faster than the k of  former section, skip this
-  // round
-  //
-  //  if (current_score.flush_speed_avg >=
-  //          max_scores.flush_speed_avg * current_opt.TEA_k &&
-  //      current_score.memtable_speed >=
-  //          max_scores.memtable_speed * current_opt.TEA_k) {
-  //    // Flush speed can be 0 for there's no enough data.
-  //    return;
-  //  }
+
   current_score_ = current_score;
   if (current_score_.memtable_speed < max_scores.memtable_speed * 0.7) {
     TuningOP result{kKeep, kKeep};
@@ -407,20 +394,11 @@ void FEAT_Tuner::DetectTuningOperations(int /*secs_elapsed*/,
       TuningOP fea_result = TuneByFEA();
       result.BatchOp = fea_result.BatchOp;
     }
-
-    //    if (current_score_.estimate_compaction_bytes <= 0.8 &&
-    //        current_score_.immutable_number < 2 && current_score_.l0_num <=
-    //        0.8) {
-    //      return;
-    //    }
-
     FillUpChangeList(change_list, result);
   }
 }
 
 SystemScores FEAT_Tuner::normalize(SystemScores &origin_score) {
-  // the normlization of flushing speed.
-  //  origin_score.flush_speed_avg /= origin_score.memtable_speed;
   return origin_score;
 }
 
@@ -428,15 +406,15 @@ TuningOP FEAT_Tuner::TuneByTEA() {
   // the flushing speed is low.
   TuningOP result{kKeep, kKeep};
 
-  if (current_score_.compaction_idle_time > idle_threshold * tuning_gap) {
+  if (current_score_.compaction_idle_time > idle_threshold) {
     result.ThreadOp = kHalf;
   }
 
-  if (current_score_.estimate_compaction_bytes > 0.8) {
+  if (current_score_.estimate_compaction_bytes >= 1) {
     result.ThreadOp = kLinearIncrease;
   }
 
-  if (current_score_.l0_num > 0.8) result.ThreadOp = kLinearIncrease;
+  if (current_score_.l0_num >= 1) result.ThreadOp = kLinearIncrease;
 
   if (current_score_.flush_speed_avg <= max_scores.flush_speed_avg * 0.5 &&
       current_score_.flush_speed_avg != 0) {
@@ -449,25 +427,28 @@ TuningOP FEAT_Tuner::TuneByTEA() {
 TuningOP FEAT_Tuner::TuneByFEA() {
   TuningOP negative_protocol{kKeep, kKeep};
 
-  float esitmate_gap = current_score_.active_size_ratio *
-                       (current_opt.write_buffer_size >> 20) /
-                       current_score_.memtable_speed;
+  // if the variance of the flush speed is very large, we should consider cut
+  // down the Batch size
 
-  if (esitmate_gap > FEA_gap_threshold * tuning_gap) {
+  //  std::cout << "flush variance:" << current_score_.flush_speed_avg << "\t"
+  //            << current_score_.flush_speed_var << std::endl;
+  //  std::cout << "flush idle time:" << current_score_.flush_idle_time
+  //            << std::endl;
+  if (current_score_.flush_speed_var > current_score_.flush_speed_avg) {
     negative_protocol.BatchOp = kHalf;
   }
-  //  if (current_score_.immutable_number > 1) {
-  //    negative_protocol.BatchOp = kLinearIncrease;
-  //  }
-
-  if (current_score_.memtable_speed + current_score_.active_size_ratio >
-          current_opt.write_buffer_size &&
-      current_score_.immutable_number == 1) {
+  if (current_score_.immutable_number > 1) {
     negative_protocol.BatchOp = kLinearIncrease;
   }
-  if (current_score_.l0_num > 1) negative_protocol.BatchOp = kLinearIncrease;
 
-  if (current_score_.estimate_compaction_bytes > 1) {
+  //  if (current_score_.memtable_speed + current_score_.active_size_ratio >
+  //          current_opt.write_buffer_size &&
+  //      current_score_.immutable_number >= 1) {
+  //    negative_protocol.BatchOp = kLinearIncrease;
+  //  }
+  if (current_score_.l0_num >= 1) negative_protocol.BatchOp = kLinearIncrease;
+
+  if (current_score_.estimate_compaction_bytes >= 1) {
     negative_protocol.BatchOp = kLinearIncrease;
   }
 

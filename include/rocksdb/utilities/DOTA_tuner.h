@@ -25,7 +25,7 @@ enum BatchSizeStallLevels : int {
 
 struct SystemScores {
   // Memory Component
-  uint64_t  memtable_speed;   // MB per sec
+  uint64_t memtable_speed;   // MB per sec
   double active_size_ratio;  // active size / total memtable size
   int immutable_number;      // NonFlush number
   // Flushing
@@ -108,13 +108,14 @@ class DOTA_Tuner {
   std::shared_ptr<std::vector<FlushMetrics>> flush_list_from_opt_ptr;
   std::shared_ptr<std::vector<QuicksandMetrics>> compaction_list_from_opt_ptr;
   SystemScores max_scores;
+  SystemScores avg_scores;
   uint64_t last_flush_thread_len;
   uint64_t last_compaction_thread_len;
   Env* env_;
   double tuning_gap;
   int double_ratio = 2;
   uint64_t last_unflushed_bytes = 0;
-  const static int score_array_len = 10;
+  const int score_array_len = 600 / tuning_gap;
   double idle_threshold = 2.5;
   double FEA_gap_threshold = 1;
   double TEA_slow_flush = 0.5;
