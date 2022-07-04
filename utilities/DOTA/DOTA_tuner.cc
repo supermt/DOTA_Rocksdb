@@ -385,7 +385,8 @@ void FEAT_Tuner::DetectTuningOperations(int /*secs_elapsed*/,
   }
 
   current_score_ = current_score;
-  if (current_score_.memtable_speed < max_scores.memtable_speed * 0.7) {
+  if (current_score_.memtable_speed ==0 ){//< max_scores.memtable_speed * 0.5) {
+    std::cout << current_score_.memtable_speed << "/" << max_scores.memtable_speed << std::endl;
     TuningOP result{kKeep, kKeep};
     if (TEA_enable) {
       result = TuneByTEA();
@@ -404,7 +405,7 @@ SystemScores FEAT_Tuner::normalize(SystemScores &origin_score) {
 
 TuningOP FEAT_Tuner::TuneByTEA() {
   // the flushing speed is low.
-  TuningOP result{kKeep, kKeep};
+  TuningOP result{kLinearIncrease, kLinearIncrease};
 
   if (current_score_.compaction_idle_time > idle_threshold) {
     result.ThreadOp = kHalf;
@@ -416,11 +417,11 @@ TuningOP FEAT_Tuner::TuneByTEA() {
 
   if (current_score_.l0_num >= 1) result.ThreadOp = kLinearIncrease;
 
-  if (current_score_.flush_speed_avg <= max_scores.flush_speed_avg * 0.5 &&
+  if (current_score_.flush_speed_avg <= max_scores.flush_speed_avg * TEA_slow_flush &&
       current_score_.flush_speed_avg != 0) {
     result.ThreadOp = kHalf;
   }
-
+  std::cout << current_score_.flush_speed_avg << "/" << max_scores.flush_speed_avg << "/"<<result.ThreadOp << std::endl;
   return result;
 }
 
