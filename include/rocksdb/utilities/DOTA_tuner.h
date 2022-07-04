@@ -159,11 +159,12 @@ class DOTA_Tuner {
   virtual ~DOTA_Tuner();
 
   inline void UpdateMaxScore(SystemScores& current_score) {
-    if (!scores.empty() &&
-        current_score.memtable_speed > scores.front().memtable_speed * 2) {
-      // this would be an error
-      return;
-    }
+    //    if (!scores.empty() &&
+    //        current_score.memtable_speed > scores.front().memtable_speed * 2)
+    //        {
+    //      // this would be an error
+    //      return;
+    //    }
 
     if (current_score.memtable_speed > max_scores.memtable_speed) {
       max_scores.memtable_speed = current_score.memtable_speed;
@@ -175,8 +176,7 @@ class DOTA_Tuner {
       max_scores.immutable_number = current_score.immutable_number;
     }
 
-    if (0 == max_scores.flush_speed_avg) {
-      //    if (current_score.flush_speed_avg > max_scores.flush_speed_avg) {
+    if (current_score.flush_speed_avg > max_scores.flush_speed_avg) {
       max_scores.flush_speed_avg = current_score.flush_speed_avg;
     }
     if (current_score.flush_speed_var > max_scores.flush_speed_var) {

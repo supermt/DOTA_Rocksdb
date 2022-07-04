@@ -385,9 +385,9 @@ void FEAT_Tuner::DetectTuningOperations(int /*secs_elapsed*/,
   CalculateAvgScore();
 
   current_score_ = current_score;
-  //  std::cout << current_score_.memtable_speed << "/" <<
-  //  avg_scores.memtable_speed
-  //            << std::endl;
+//  std::cout << current_score_.memtable_speed << "/" << avg_scores.memtable_speed
+//            << std::endl;
+
   if (current_score_.memtable_speed <=
       avg_scores.memtable_speed * TEA_slow_flush) {
     TuningOP result{kKeep, kKeep};
@@ -420,12 +420,10 @@ TuningOP FEAT_Tuner::TuneByTEA() {
   if (current_score_.l0_num >= 1) result.ThreadOp = kLinearIncrease;
 
   if (current_score_.flush_speed_avg <=
-          avg_scores.flush_speed_avg * TEA_slow_flush &&
-      current_score_.flush_speed_avg != 0) {
+      avg_scores.flush_speed_avg * TEA_slow_flush) {
     result.ThreadOp = kHalf;
   }
-  //  std::cout << current_score_.flush_speed_avg << "/" <<
-  //  max_scores.flush_speed_avg << "/"<<result.ThreadOp << std::endl;
+
   return result;
 }
 
