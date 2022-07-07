@@ -139,9 +139,8 @@ SystemScores DOTA_Tuner::ScoreTheSystem() {
     auto avg_flush = current_score.flush_speed_avg / num_new_flushes;
     current_score.flush_speed_avg /= tuning_gap;
     for (auto item : flush_metric_list) {
-      current_score.flush_speed_var +=
-          (item.write_out_bandwidth - current_score.flush_speed_avg) *
-          (item.write_out_bandwidth - current_score.flush_speed_avg);
+      current_score.flush_speed_var += (item.write_out_bandwidth - avg_flush) *
+                                       (item.write_out_bandwidth - avg_flush);
     }
     current_score.flush_speed_var /= num_new_flushes;
   }
