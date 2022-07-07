@@ -443,9 +443,8 @@ TuningOP FEAT_Tuner::TuneByTEA() {
   //    //      &&      current_score_.flush_speed_avg != 0) {
   //    result.ThreadOp = kLinearIncrease;
   //  }
-  std::cout <<  current_score_.flush_speed_avg <<"/" << avg_scores.flush_speed_avg<<std::endl;
   if (current_score_.memtable_speed > 
-      current_score_.flush_speed_avg * TEA_slow_flush) {
+      current_score_.flush_speed_avg * TEA_slow_flush || current_score_.memtable_speed == 0) {
 
     result.ThreadOp = kHalf;
     std::cout << "slow flush decrease, thread" << std::endl;
