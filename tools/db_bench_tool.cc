@@ -644,8 +644,9 @@ DEFINE_bool(TEA_enable, false, "Trigger FEAT tuner's TEA component");
 DEFINE_int32(SILK_bandwidth_limitation, 200, "MBPS of disk limitation");
 DEFINE_double(idle_rate, 2.5,
               "TEA will decide this as the idle rate of the threads");
-DEFINE_double(FEA_gap_threshold, 1, "The negative feedback loop's threshold");
-DEFINE_double(TEA_slow_flush, 0.3, "The negative feedback loop's threshold");
+DEFINE_double(FEA_gap_threshold, 1.25,
+              "The negative feedback loop's threshold");
+DEFINE_double(TEA_slow_flush, 0.5, "The negative feedback loop's threshold");
 DEFINE_double(DOTA_tuning_gap, 1.0, "Tuning gap of the DOTA agent, in secs ");
 
 DEFINE_bool(Funnel_enable, false, "Use Funnel shape model");

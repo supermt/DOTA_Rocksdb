@@ -81,7 +81,8 @@ SystemScores DOTA_Tuner::ScoreTheSystem() {
   running_db_->GetIntProperty("rocksdb.size-all-mem-tables", &total_mem_size);
   running_db_->GetIntProperty("rocksdb.cur-size-active-mem-table", &active_mem);
 
-  current_score.active_size_ratio = (double)(active_mem >> 20);
+  current_score.active_size_ratio =
+      (double)active_mem / (double)current_opt.write_buffer_size;
   current_score.immutable_number =
       cfd->imm() == nullptr ? 0 : cfd->imm()->NumNotFlushed();
 
@@ -96,16 +97,12 @@ SystemScores DOTA_Tuner::ScoreTheSystem() {
     flush_metric_list.push_back(temp);
     current_score.flush_speed_avg += temp.write_out_bandwidth;
     current_score.disk_bandwidth += temp.total_bytes;
-    if (i > 2) {
-      current_score.flush_gap_time +=
-          temp.start_time - flush_list_from_opt_ptr->at(i - 1).start_time;
-      current_score.flush_gap_time /= kMicrosInSecond;
-    }
 
     if (current_score.l0_num > temp.l0_files) {
       current_score.l0_num = temp.l0_files;
     }
   }
+
   int l0_compaction = 0;
   auto num_new_flushes = (flush_result_length - flush_list_accessed);
   current_score.flush_numbers = num_new_flushes;
@@ -117,6 +114,9 @@ SystemScores DOTA_Tuner::ScoreTheSystem() {
 
   current_score.memtable_speed /= tuning_gap;
   current_score.memtable_speed /= kMicrosInSecond;  // we use MiB to calculate
+
+  current_score.flush_gap_time = (current_opt.write_buffer_size >> 20) /
+                                 (current_score.memtable_speed + 1);
 
   uint64_t max_pending_bytes = 0;
 
@@ -455,7 +455,7 @@ TuningOP FEAT_Tuner::TuneByFEA() {
   TuningOP negative_protocol{kHalf, kKeep};
 
   auto estimate_gap =
-      (double)(current_opt.write_buffer_size >> 20) / avg_scores.memtable_speed;
+      (current_opt.write_buffer_size >> 20) / avg_scores.flush_speed_avg;
 
   std::cout << estimate_gap << "/" << avg_scores.flush_gap_time << std::endl;
   if (estimate_gap > avg_scores.flush_gap_time * FEA_gap_threshold) {
