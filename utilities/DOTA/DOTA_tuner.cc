@@ -387,9 +387,8 @@ void FEAT_Tuner::DetectTuningOperations(int /*secs_elapsed*/,
   CalculateAvgScore();
 
   current_score_ = current_score;
-  //  std::cout << current_score_.memtable_speed << "/" <<
-  //  avg_scores.memtable_speed
-  //            << std::endl;
+  std::cout << current_score_.memtable_speed << "/" << avg_scores.memtable_speed
+            << std::endl;
 
   if (current_score_.memtable_speed == 0) {
     //<=avg_scores.memtable_speed * TEA_slow_flush) {
@@ -414,6 +413,12 @@ SystemScores FEAT_Tuner::normalize(SystemScores &origin_score) {
 TuningOP FEAT_Tuner::TuneByTEA() {
   // the flushing speed is low.
   TuningOP result{kKeep, kKeep};
+
+  if (current_score_.immutable_number >= 1) {
+    //      &&      current_score_.flush_speed_avg != 0) {
+    result.ThreadOp = kLinearIncrease;
+  }
+
   if (current_score_.flush_speed_avg <=
       avg_scores.flush_speed_avg * TEA_slow_flush) {
     //      &&      current_score_.flush_speed_avg != 0) {
@@ -439,10 +444,11 @@ TuningOP FEAT_Tuner::TuneByTEA() {
 TuningOP FEAT_Tuner::TuneByFEA() {
   TuningOP negative_protocol{kKeep, kKeep};
 
-  //  std::cout << current_score_.flush_gap_time << "/" <<
-  //  avg_scores.flush_gap_time
+  //    std::cout << current_score_.flush_gap_time << "/" <<
+  //    avg_scores.flush_gap_time
   //            << std::endl;
-  if (current_score_.flush_idle_time > idle_threshold) {
+  if (current_score_.flush_gap_time >
+      avg_scores.flush_gap_time * TEA_slow_flush) {
     negative_protocol.BatchOp = kHalf;
   }
 
