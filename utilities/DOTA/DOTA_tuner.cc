@@ -440,8 +440,8 @@ TuningOP FEAT_Tuner::TuneByTEA() {
 
   if (current_score_.l0_num >= 1) result.ThreadOp = kLinearIncrease;
 
-  //  std::cout << current_score_.flush_speed_avg << "/"
-  //            << avg_scores.flush_speed_avg << std::endl;
+  std::cout << current_score_.flush_speed_avg << "/"
+            << avg_scores.flush_speed_avg << std::endl;
 
   return result;
 }
@@ -457,7 +457,7 @@ TuningOP FEAT_Tuner::TuneByFEA() {
     negative_protocol.BatchOp = kHalf;
   }
 
-  if (current_score_.immutable_number == 1 &&
+  if (current_score_.immutable_number >= 1 ||
       current_score_.memtable_speed * tuning_gap +
               current_score_.active_size_ratio -
               avg_scores.flush_speed_avg * tuning_gap >=
