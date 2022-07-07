@@ -96,7 +96,6 @@ SystemScores DOTA_Tuner::ScoreTheSystem() {
     flush_metric_list.push_back(temp);
     current_score.flush_speed_avg += temp.write_out_bandwidth;
     current_score.disk_bandwidth += temp.total_bytes;
-    current_score.memtable_speed += temp.total_bytes;
     current_score.flush_gap_time += temp.flush_gap;
     if (current_score.l0_num > temp.l0_files) {
       current_score.l0_num = temp.l0_files;
@@ -106,11 +105,17 @@ SystemScores DOTA_Tuner::ScoreTheSystem() {
   auto num_new_flushes = (flush_result_length - flush_list_accessed);
   current_score.flush_numbers = num_new_flushes;
 
-  current_score.memtable_speed = current_score.memtable_speed / tuning_gap;
+  while (total_mem_size < last_unflushed_bytes) {
+    total_mem_size += current_opt.write_buffer_size;
+  }
+  current_score.memtable_speed += (total_mem_size - last_unflushed_bytes);
+
+  current_score.memtable_speed /= tuning_gap;
   current_score.memtable_speed /= kMicrosInSecond;  // we use MiB to calculate
 
   uint64_t max_pending_bytes = 0;
 
+  last_unflushed_bytes = total_mem_size;
   for (uint64_t i = compaction_list_accessed; i < compaction_result_length;
        i++) {
     auto temp = compaction_list_from_opt_ptr->at(i);
@@ -420,8 +425,9 @@ TuningOP FEAT_Tuner::TuneByTEA() {
   }
 
   if (current_score_.flush_speed_avg <=
-      avg_scores.flush_speed_avg * TEA_slow_flush) {
-    //      &&      current_score_.flush_speed_avg != 0) {
+          avg_scores.flush_speed_avg * TEA_slow_flush
+      //      ) {
+      && current_score_.flush_speed_avg != 0) {
     result.ThreadOp = kHalf;
   }
 
