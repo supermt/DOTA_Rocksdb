@@ -97,12 +97,15 @@ SystemScores DOTA_Tuner::ScoreTheSystem() {
     flush_metric_list.push_back(temp);
     current_score.flush_speed_avg += temp.write_out_bandwidth;
     current_score.disk_bandwidth += temp.total_bytes;
-
+    if (i > 1)
+      current_score.flush_gap_time +=
+          (temp.start_time - flush_list_from_opt_ptr->at(i - 1).start_time);
+    //        (double)(current_opt.write_buffer_size >> 20) /
+    //                                 (current_score.memtable_speed + 1);
     if (current_score.l0_num > temp.l0_files) {
       current_score.l0_num = temp.l0_files;
     }
   }
-
   int l0_compaction = 0;
   auto num_new_flushes = (flush_result_length - flush_list_accessed);
   current_score.flush_numbers = num_new_flushes;
@@ -114,9 +117,6 @@ SystemScores DOTA_Tuner::ScoreTheSystem() {
 
   current_score.memtable_speed /= tuning_gap;
   current_score.memtable_speed /= kMicrosInSecond;  // we use MiB to calculate
-
-  current_score.flush_gap_time = (double)(current_opt.write_buffer_size >> 20) /
-                                 (current_score.memtable_speed + 1);
 
   uint64_t max_pending_bytes = 0;
 
@@ -143,7 +143,11 @@ SystemScores DOTA_Tuner::ScoreTheSystem() {
                                        (item.write_out_bandwidth - avg_flush);
     }
     current_score.flush_speed_var /= num_new_flushes;
+    current_score.flush_gap_time /= (kMicrosInSecond * num_new_flushes);
   }
+
+  std::cout << current_score.flush_gap_time << std::endl;
+
   if (l0_compaction != 0) {
     current_score.l0_drop_ratio /= l0_compaction;
   }
@@ -335,13 +339,14 @@ SystemScores SystemScores::operator-(const SystemScores &a) {
       this->compaction_idle_time - a.compaction_idle_time;
   temp.flush_idle_time = this->flush_idle_time - a.flush_idle_time;
   temp.flush_gap_time = this->flush_gap_time - a.flush_gap_time;
+  temp.flush_numbers = this->flush_numbers - a.flush_numbers;
 
   return temp;
 }
 
 SystemScores SystemScores::operator+(const SystemScores &a) {
   SystemScores temp;
-
+  temp.flush_numbers = this->flush_numbers + a.flush_numbers;
   temp.memtable_speed = this->memtable_speed + a.memtable_speed;
   temp.active_size_ratio = this->active_size_ratio + a.active_size_ratio;
   temp.immutable_number = this->immutable_number + a.immutable_number;
@@ -365,15 +370,22 @@ SystemScores SystemScores::operator/(const int &a) {
   temp.memtable_speed = this->memtable_speed / a;
   temp.active_size_ratio = this->active_size_ratio / a;
   temp.immutable_number = this->immutable_number / a;
-  temp.flush_speed_avg = this->flush_speed_avg / a;
-  temp.flush_speed_var = this->flush_speed_var / a;
   temp.l0_num = this->l0_num / a;
   temp.l0_drop_ratio = this->l0_drop_ratio / a;
   temp.estimate_compaction_bytes = this->estimate_compaction_bytes / a;
   temp.disk_bandwidth = this->disk_bandwidth / a;
   temp.compaction_idle_time = this->compaction_idle_time / a;
   temp.flush_idle_time = this->flush_idle_time / a;
-  temp.flush_gap_time = this->flush_gap_time / a;
+
+  temp.flush_speed_avg = this->flush_numbers == 0
+                             ? 0
+                             : this->flush_speed_avg / this->flush_numbers;
+  temp.flush_speed_var = this->flush_numbers == 0
+                             ? 0
+                             : this->flush_speed_var / this->flush_numbers;
+  temp.flush_gap_time =
+      this->flush_numbers == 0 ? 0 : this->flush_gap_time / this->flush_numbers;
+
   return temp;
 }
 
@@ -400,7 +412,8 @@ void FEAT_Tuner::DetectTuningOperations(int /*secs_elapsed*/,
   //  avg_scores.memtable_speed
   //            << std::endl;
 
-  if (current_score_.memtable_speed == 0 && current_score_.immutable_number >= 1) {
+  if (current_score_.memtable_speed == 0 &&
+      current_score_.immutable_number >= 1) {
     //<=avg_scores.memtable_speed * TEA_slow_flush) {
     if (current_score.flush_speed_avg == 0 && current_score.memtable_speed > 0)
       return;
@@ -430,7 +443,7 @@ TuningOP FEAT_Tuner::TuneByTEA() {
   //  }
 
   if (current_score_.flush_speed_avg <=
-          avg_scores.flush_speed_avg * TEA_slow_flush){
+      avg_scores.flush_speed_avg * TEA_slow_flush) {
     result.ThreadOp = kHalf;
   }
 
@@ -453,34 +466,32 @@ TuningOP FEAT_Tuner::TuneByTEA() {
 TuningOP FEAT_Tuner::TuneByFEA() {
   TuningOP negative_protocol{kKeep, kKeep};
 
-  auto estimate_gap =
-      (double)(current_opt.write_buffer_size >> 20) / (avg_scores.memtable_speed+1);
+  auto estimate_gap = (double)(current_opt.write_buffer_size >> 20) /
+                      (avg_scores.memtable_speed + 1);
 
-  std::cout << estimate_gap << "/" << avg_scores.flush_gap_time << std::endl;
+  std::cout << "estimate, first, average " << estimate_gap << "/"
+            << scores[0].flush_gap_time << "/" << avg_scores.flush_gap_time
+            << std::endl;
   if (estimate_gap > FEA_gap_threshold * scores[0].flush_gap_time) {
     negative_protocol.BatchOp = kHalf;
-  std::cout << "long gap, reduce"<<std::endl; 
+    std::cout << "long gap, reduce" << std::endl;
   }
 
-  //  current_score_.memtable_speed * tuning_gap +
-  //          current_score_.active_size_ratio -
-  //          avg_scores.flush_speed_avg * tuning_gap >=
-  //      current_opt.write_buffer_size
-  if (current_score_.memtable_speed > current_score_.flush_speed_avg) {
+  if (current_score_.immutable_number > 1) {
     negative_protocol.BatchOp = kLinearIncrease;
-    std::cout << "slow flushing, increase"<<std::endl; 
+    std::cout << "small memtables, increase" << std::endl;
   }
-  
-//  if (current_score_.immutable_number > 1) {
-//    negative_protocol.BatchOp = kLinearIncrease;
-//  }
-
-  if (current_score_.l0_num >= 1) negative_protocol.BatchOp = kLinearIncrease;
-
-  if (current_score_.estimate_compaction_bytes >= 1) {
+  if (current_score_.memtable_speed >
+      avg_scores.flush_speed_avg * TEA_slow_flush) {
     negative_protocol.BatchOp = kLinearIncrease;
+    std::cout << "slow flushing, increase" << std::endl;
   }
-  std::cout << "lo/ro increase"<<std::endl; 
+
+  if (current_score_.estimate_compaction_bytes >= 1 ||
+      current_score_.l0_num >= 1) {
+    negative_protocol.BatchOp = kLinearIncrease;
+    std::cout << "lo/ro increase" << std::endl;
+  }
 
   return negative_protocol;
 }
