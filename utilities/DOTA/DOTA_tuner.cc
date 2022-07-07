@@ -96,7 +96,12 @@ SystemScores DOTA_Tuner::ScoreTheSystem() {
     flush_metric_list.push_back(temp);
     current_score.flush_speed_avg += temp.write_out_bandwidth;
     current_score.disk_bandwidth += temp.total_bytes;
-    current_score.flush_gap_time += temp.flush_gap;
+    if (i > 2) {
+      current_score.flush_gap_time +=
+          temp.start_time - flush_list_from_opt_ptr->at(i - 1).start_time;
+      current_score.flush_gap_time /= kMicrosInSecond;
+    }
+
     if (current_score.l0_num > temp.l0_files) {
       current_score.l0_num = temp.l0_files;
     }
@@ -392,8 +397,9 @@ void FEAT_Tuner::DetectTuningOperations(int /*secs_elapsed*/,
   CalculateAvgScore();
 
   current_score_ = current_score;
-  std::cout << current_score_.memtable_speed << "/" << avg_scores.memtable_speed
-            << std::endl;
+  //  std::cout << current_score_.memtable_speed << "/" <<
+  //  avg_scores.memtable_speed
+  //            << std::endl;
 
   if (current_score_.memtable_speed == 0) {
     //<=avg_scores.memtable_speed * TEA_slow_flush) {
@@ -439,29 +445,29 @@ TuningOP FEAT_Tuner::TuneByTEA() {
   }
 
   if (current_score_.l0_num >= 1) result.ThreadOp = kLinearIncrease;
-
-  std::cout << current_score_.flush_speed_avg << "/"
-            << avg_scores.flush_speed_avg << std::endl;
+  //
+  //  std::cout << current_score_.flush_speed_avg << "/"
+  //            << avg_scores.flush_speed_avg << std::endl;
 
   return result;
 }
 
 TuningOP FEAT_Tuner::TuneByFEA() {
-  TuningOP negative_protocol{kKeep, kKeep};
+  TuningOP negative_protocol{kHalf, kKeep};
 
-  //    std::cout << current_score_.flush_gap_time << "/" <<
-  //    avg_scores.flush_gap_time
-  //            << std::endl;
-  if (current_score_.flush_gap_time >
-      avg_scores.flush_gap_time * FEA_gap_threshold) {
+  auto estimate_gap =
+      (double)(current_opt.write_buffer_size >> 20) / avg_scores.memtable_speed;
+
+  std::cout << estimate_gap << "/" << avg_scores.flush_gap_time << std::endl;
+  if (estimate_gap > avg_scores.flush_gap_time * FEA_gap_threshold) {
     negative_protocol.BatchOp = kHalf;
   }
 
-  if (current_score_.immutable_number >= 1 ||
-      current_score_.memtable_speed * tuning_gap +
-              current_score_.active_size_ratio -
-              avg_scores.flush_speed_avg * tuning_gap >=
-          current_opt.write_buffer_size) {
+  //  current_score_.memtable_speed * tuning_gap +
+  //          current_score_.active_size_ratio -
+  //          avg_scores.flush_speed_avg * tuning_gap >=
+  //      current_opt.write_buffer_size
+  if (current_score_.immutable_number > 1) {
     negative_protocol.BatchOp = kLinearIncrease;
   }
 
