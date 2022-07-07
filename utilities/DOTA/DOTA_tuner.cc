@@ -131,8 +131,8 @@ SystemScores DOTA_Tuner::ScoreTheSystem() {
 
   // flush_speed_avg,flush_speed_var,l0_drop_ratio
   if (num_new_flushes != 0) {
-    current_score.flush_speed_avg /= num_new_flushes;
-
+    auto avg_flush = current_score.flush_speed_avg / num_new_flushes;
+    current_score.flush_speed_avg /= tuning_gap;
     for (auto item : flush_metric_list) {
       current_score.flush_speed_var +=
           (item.write_out_bandwidth - current_score.flush_speed_avg) *
@@ -419,15 +419,14 @@ TuningOP FEAT_Tuner::TuneByTEA() {
   // the flushing speed is low.
   TuningOP result{kKeep, kKeep};
 
-  if (current_score_.immutable_number >= 1) {
-    //      &&      current_score_.flush_speed_avg != 0) {
-    result.ThreadOp = kLinearIncrease;
-  }
+  //  if (current_score_.immutable_number >= 1) {
+  //    //      &&      current_score_.flush_speed_avg != 0) {
+  //    result.ThreadOp = kLinearIncrease;
+  //  }
 
   if (current_score_.flush_speed_avg <=
-          avg_scores.flush_speed_avg * TEA_slow_flush
-      //      ) {
-      && current_score_.flush_speed_avg != 0) {
+          avg_scores.flush_speed_avg * TEA_slow_flush &&
+      current_score_.flush_speed_avg != 0) {
     result.ThreadOp = kHalf;
   }
 
@@ -454,11 +453,15 @@ TuningOP FEAT_Tuner::TuneByFEA() {
   //    avg_scores.flush_gap_time
   //            << std::endl;
   if (current_score_.flush_gap_time >
-      avg_scores.flush_gap_time * TEA_slow_flush) {
+      avg_scores.flush_gap_time * FEA_gap_threshold) {
     negative_protocol.BatchOp = kHalf;
   }
 
-  if (current_score_.immutable_number >= 1) {
+  if (current_score_.immutable_number == 1 &&
+      current_score_.memtable_speed * tuning_gap +
+              current_score_.active_size_ratio -
+              avg_scores.flush_speed_avg * tuning_gap >=
+          current_opt.write_buffer_size) {
     negative_protocol.BatchOp = kLinearIncrease;
   }
 
