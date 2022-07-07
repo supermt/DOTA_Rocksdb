@@ -115,7 +115,7 @@ SystemScores DOTA_Tuner::ScoreTheSystem() {
   current_score.memtable_speed /= tuning_gap;
   current_score.memtable_speed /= kMicrosInSecond;  // we use MiB to calculate
 
-  current_score.flush_gap_time = (current_opt.write_buffer_size >> 20) /
+  current_score.flush_gap_time = (double)(current_opt.write_buffer_size >> 20) /
                                  (current_score.memtable_speed + 1);
 
   uint64_t max_pending_bytes = 0;
@@ -137,7 +137,7 @@ SystemScores DOTA_Tuner::ScoreTheSystem() {
   // flush_speed_avg,flush_speed_var,l0_drop_ratio
   if (num_new_flushes != 0) {
     auto avg_flush = current_score.flush_speed_avg / num_new_flushes;
-    current_score.flush_speed_avg /= tuning_gap;
+    current_score.flush_speed_avg /= num_new_flushes;
     for (auto item : flush_metric_list) {
       current_score.flush_speed_var += (item.write_out_bandwidth - avg_flush) *
                                        (item.write_out_bandwidth - avg_flush);
@@ -400,7 +400,7 @@ void FEAT_Tuner::DetectTuningOperations(int /*secs_elapsed*/,
   //  avg_scores.memtable_speed
   //            << std::endl;
 
-  if (current_score_.memtable_speed == 0) {
+  if (current_score_.memtable_speed == 0 && current_score_.immutable_number >= 1) {
     //<=avg_scores.memtable_speed * TEA_slow_flush) {
     if (current_score.flush_speed_avg == 0 && current_score.memtable_speed > 0)
       return;
@@ -422,7 +422,7 @@ SystemScores FEAT_Tuner::normalize(SystemScores &origin_score) {
 
 TuningOP FEAT_Tuner::TuneByTEA() {
   // the flushing speed is low.
-  TuningOP result{kKeep, kKeep};
+  TuningOP result{kKeep, kLinearIncrease};
 
   //  if (current_score_.immutable_number >= 1) {
   //    //      &&      current_score_.flush_speed_avg != 0) {
@@ -430,8 +430,7 @@ TuningOP FEAT_Tuner::TuneByTEA() {
   //  }
 
   if (current_score_.flush_speed_avg <=
-          avg_scores.flush_speed_avg * TEA_slow_flush &&
-      current_score_.flush_speed_avg != 0) {
+          avg_scores.flush_speed_avg * TEA_slow_flush){
     result.ThreadOp = kHalf;
   }
 
@@ -452,29 +451,36 @@ TuningOP FEAT_Tuner::TuneByTEA() {
 }
 
 TuningOP FEAT_Tuner::TuneByFEA() {
-  TuningOP negative_protocol{kHalf, kKeep};
+  TuningOP negative_protocol{kKeep, kKeep};
 
   auto estimate_gap =
-      (current_opt.write_buffer_size >> 20) / avg_scores.flush_speed_avg;
+      (double)(current_opt.write_buffer_size >> 20) / (avg_scores.memtable_speed+1);
 
   std::cout << estimate_gap << "/" << avg_scores.flush_gap_time << std::endl;
-  if (estimate_gap > avg_scores.flush_gap_time * FEA_gap_threshold) {
+  if (estimate_gap > FEA_gap_threshold * scores[0].flush_gap_time) {
     negative_protocol.BatchOp = kHalf;
+  std::cout << "long gap, reduce"<<std::endl; 
   }
 
   //  current_score_.memtable_speed * tuning_gap +
   //          current_score_.active_size_ratio -
   //          avg_scores.flush_speed_avg * tuning_gap >=
   //      current_opt.write_buffer_size
-  if (current_score_.immutable_number > 1) {
+  if (current_score_.memtable_speed > current_score_.flush_speed_avg) {
     negative_protocol.BatchOp = kLinearIncrease;
+    std::cout << "slow flushing, increase"<<std::endl; 
   }
+  
+//  if (current_score_.immutable_number > 1) {
+//    negative_protocol.BatchOp = kLinearIncrease;
+//  }
 
   if (current_score_.l0_num >= 1) negative_protocol.BatchOp = kLinearIncrease;
 
   if (current_score_.estimate_compaction_bytes >= 1) {
     negative_protocol.BatchOp = kLinearIncrease;
   }
+  std::cout << "lo/ro increase"<<std::endl; 
 
   return negative_protocol;
 }
