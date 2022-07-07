@@ -181,7 +181,7 @@ SystemScores DOTA_Tuner::ScoreTheSystem() {
   // flush threads always get 1/4 of all
   current_score.compaction_idle_time /=
       (current_opt.max_background_jobs * kMicrosInSecond * 3 / 4);
-  
+  current_score.flush_speed_avg = last_non_zero_flush;
   // clean up
   flush_list_accessed = flush_result_length;
   compaction_list_accessed = compaction_result_length;
@@ -312,7 +312,7 @@ void DOTA_Tuner::FillUpChangeList(std::vector<ChangePoint> *change_list,
   }
   switch (op.ThreadOp) {
     case kLinearIncrease:
-      SetThreadNum(change_list, current_thread_num += 2);
+      SetThreadNum(change_list, current_thread_num += 1);
       break;
     case kHalf:
       SetThreadNum(change_list, current_thread_num /= 2);
@@ -436,17 +436,14 @@ SystemScores FEAT_Tuner::normalize(SystemScores &origin_score) {
 TuningOP FEAT_Tuner::TuneByTEA() {
   // the flushing speed is low.
   TuningOP result{kKeep, kLinearIncrease};
-  if (current_score_.flush_speed_avg ==0 ){ 
-        current_score_.flush_speed_avg = last_non_zero_flush;
-  }
+
   //  if (current_score_.immutable_number >= 1) {
   //    //      &&      current_score_.flush_speed_avg != 0) {
   //    result.ThreadOp = kLinearIncrease;
   //  }
   std::cout <<  current_score_.flush_speed_avg <<"/" << avg_scores.flush_speed_avg<<std::endl;
-  if (current_score_.memtable_speed > 
-      current_score_.flush_speed_avg * TEA_slow_flush) {
-
+  if (current_score_.flush_speed_avg <=
+      avg_scores.flush_speed_avg * TEA_slow_flush) { 
     result.ThreadOp = kHalf;
     std::cout << "slow flush decrease, thread" << std::endl;
   }
@@ -469,7 +466,7 @@ TuningOP FEAT_Tuner::TuneByTEA() {
 }
 
 TuningOP FEAT_Tuner::TuneByFEA() {
-  TuningOP negative_protocol{kKeep, kKeep};
+  TuningOP negative_protocol{kHalf, kKeep};
 
   auto estimate_gap = (double)(current_opt.write_buffer_size >> 20) /
                       (avg_scores.flush_speed_avg + 1);

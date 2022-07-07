@@ -642,9 +642,9 @@ DEFINE_bool(DOTA_enabled, false, "Whether trigger the DOTA framework");
 DEFINE_bool(FEA_enable, false, "Trigger FEAT tuner's FEA component");
 DEFINE_bool(TEA_enable, false, "Trigger FEAT tuner's TEA component");
 DEFINE_int32(SILK_bandwidth_limitation, 200, "MBPS of disk limitation");
-DEFINE_double(idle_rate, 2.5,
+DEFINE_double(idle_rate, 2.15,
               "TEA will decide this as the idle rate of the threads");
-DEFINE_double(FEA_gap_threshold, 1.25,
+DEFINE_double(FEA_gap_threshold, 1.5,
               "The negative feedback loop's threshold");
 DEFINE_double(TEA_slow_flush, 0.5, "The negative feedback loop's threshold");
 DEFINE_double(DOTA_tuning_gap, 1.0, "Tuning gap of the DOTA agent, in secs ");

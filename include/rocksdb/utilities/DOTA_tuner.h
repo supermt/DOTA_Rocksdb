@@ -122,6 +122,7 @@ class DOTA_Tuner {
   double idle_threshold = 2.5;
   double FEA_gap_threshold = 1;
   double TEA_slow_flush = 0.5;
+  uint64_t last_non_zero_flush=0;
   void UpdateSystemStats() { UpdateSystemStats(running_db_); }
 
  public:
