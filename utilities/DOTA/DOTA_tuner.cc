@@ -470,12 +470,9 @@ TuningOP FEAT_Tuner::TuneByTEA() {
 TuningOP FEAT_Tuner::TuneByFEA() {
   TuningOP negative_protocol{kKeep, kKeep};
 
-  auto estimate_gap = (double)(current_opt.write_buffer_size >> 20) /
-                      (avg_scores.flush_speed_avg + 1);
-
-  if (estimate_gap > FEA_gap_threshold * avg_scores.flush_gap_time) {
+  if (current_score_.compaction_idle_time > idle_threshold) {
     negative_protocol.BatchOp = kHalf;
-    std::cout << "long gap, reduce" << std::endl;
+    std::cout << "idle threads, reduce batch" << std::endl;
   }
 
   if (current_score_.memtable_speed >
@@ -490,6 +487,10 @@ TuningOP FEAT_Tuner::TuneByFEA() {
     std::cout << "lo/ro increase" << std::endl;
   }
 
+  if (current_score_.flush_idle_time > idle_threshold*0.2) {
+    negative_protocol.BatchOp = kKeep;
+    std::cout << "flush is idle, keep the threads" << std::endl;
+  }
   return negative_protocol;
 }
 void FEAT_Tuner::CalculateAvgScore() {

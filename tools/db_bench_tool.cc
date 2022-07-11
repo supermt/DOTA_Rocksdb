@@ -631,6 +631,7 @@ DEFINE_string(change_points, "",
 
 // auto-tuner related options
 
+DEFINE_int64(load_duration, 0, "The loading duration of YCSB");
 DEFINE_string(ycsb_workload, "", "The workload of YCSB");
 DEFINE_int64(ycsb_request_speed, 100, "The request speed of YCSB, in MB/s");
 DEFINE_int64(load_num, 100000, "Num of operations in loading phrase");
@@ -5050,22 +5051,16 @@ class Benchmark {
   double SineRate(double x) {
     return FLAGS_sine_a * sin((FLAGS_sine_b * x) + FLAGS_sine_c) + FLAGS_sine_d;
   }
-
   void YCSBWorking(ThreadState* thread, ycsbc::CoreWorkload* workload, int load,
                    int run) {
     int remain_loading = FLAGS_load_num;
     int remain_running = FLAGS_running_num;
     const int test_duration = FLAGS_duration;
     int64_t ops_per_stage = 1;
-    std::unique_ptr<RateLimiter> ycsb_write_rate_limiter;
-
-    if (FLAGS_ycsb_request_speed > 0) {
-      ycsb_write_rate_limiter.reset(
-          NewGenericRateLimiter(FLAGS_random_fill_average << 20));
-    }
 
     // load first, then run
-    Duration loading_duration(0, remain_loading, ops_per_stage);
+    Duration loading_duration(FLAGS_load_duration, remain_loading, ops_per_stage);
+    Duration running_duration(test_duration, remain_running, ops_per_stage);
     int stage = 0;
     //    WriteBatch batch;
     Status s;
@@ -5089,7 +5084,7 @@ class Benchmark {
           }
         }
         std::string key = workload->BuildKeyName();
-        Slice val = gen.Generate(FLAGS_value_size);
+        Slice val = gen.Generate();
         db_.db->Put(w_op, key, val);
 
         int64_t batch_bytes = 0;
@@ -5108,7 +5103,6 @@ class Benchmark {
       thread->stats.AddBytes(bytes);
     }
 
-    Duration running_duration(test_duration, remain_running, ops_per_stage);
     if (run) {
       duration = running_duration;
 
@@ -5142,28 +5136,16 @@ class Benchmark {
             thread->stats.FinishedOps(nullptr, db, entries_per_batch_, kRead);
           } break;
           case ycsbc::UPDATE: {
-            Slice val = gen.Generate(FLAGS_value_size);
+            Slice val = gen.Generate();
             // In rocksdb, update is just another put operation.
             op_status = db_.db->Put(w_op, key, val);
-            if (FLAGS_ycsb_request_speed > 0) {
-              ycsb_write_rate_limiter->Request(
-                  key.size() + val.size(), Env::IO_HIGH, nullptr /* stats */,
-                  RateLimiter::OpType::kWrite);
-            }
-
             thread->stats.FinishedOps(nullptr, db, entries_per_batch_, kUpdate);
           } break;
           case ycsbc::INSERT: {
-            Slice val = gen.Generate(FLAGS_value_size);
+            Slice val = gen.Generate();
             // In rocksdb, update is just another put operation.
             op_status = db_.db->Put(w_op, key, val);
             thread->stats.FinishedOps(nullptr, db, entries_per_batch_, kWrite);
-            if (FLAGS_ycsb_request_speed > 0) {
-              ycsb_write_rate_limiter->Request(
-                  key.size() + val.size(), Env::IO_HIGH, nullptr /* stats */,
-                  RateLimiter::OpType::kWrite);
-            }
-
           } break;
           case ycsbc::SCAN: {
             Iterator* db_iter = db_.db->NewIterator(rocksdb::ReadOptions());
@@ -5182,10 +5164,9 @@ class Benchmark {
             if (op_status.IsNotFound()) {
               blind_updates++;
             }
-            Slice val = gen.Generate(FLAGS_value_size);
+            Slice val = gen.Generate();
             op_status = db_.db->Put(w_op, key, val);
-            thread->stats.FinishedOps(nullptr, db, entries_per_batch_,
-                                      kReadModifyWrite);
+            thread->stats.FinishedOps(nullptr, db, entries_per_batch_, kUpdate);
           } break;
           case ycsbc::DELETE: {
             op_status = db_.db->Delete(w_op, key);
@@ -5195,15 +5176,10 @@ class Benchmark {
             throw ycsbc::utils::Exception(
                 "Operation request is not recognized!");
         }
-      }  // end while
-
+      }
       thread->stats.AddBytes(bytes);
-      std::cout << "read state(found/read): " << found_count << "/"
-                << read_count << std::endl;
-      std::cout << "blind_updates: " << blind_updates << std::endl;
     }
   }
-
   void DoWrite(ThreadState* thread, WriteMode write_mode) {
     const int test_duration = write_mode == RANDOM ? FLAGS_duration : 0;
     const int64_t num_ops = writes_ == 0 ? num_ : writes_;
