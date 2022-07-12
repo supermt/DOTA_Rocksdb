@@ -52,6 +52,7 @@
 #include "rocksdb/status.h"
 #include "rocksdb/trace_reader_writer.h"
 #include "rocksdb/transaction_log.h"
+#include "rocksdb/utilities/DOTA_tuner.h"
 #include "rocksdb/write_buffer_manager.h"
 #include "table/scoped_arena_iterator.h"
 #include "trace_replay/block_cache_tracer.h"
@@ -78,6 +79,7 @@ class WriteCallback;
 struct JobContext;
 struct ExternalSstFileInfo;
 struct MemTableInfo;
+class FEAT_Tuner;
 
 // Class to maintain directories for all database paths other than main one.
 class Directories {
@@ -310,7 +312,7 @@ class DBImpl : public DB {
 
   Status PauseCompactionWork();
   Status ContinueCompactionWork();
-  
+
   using DB::SetOptions;
   Status SetOptions(
       ColumnFamilyHandle* column_family,
@@ -985,6 +987,10 @@ class DBImpl : public DB {
     return files_grabbed_for_purge_;
   }
 #endif  // NDEBUG
+  void SetupTuner(int64_t* last_report_op_ptr,
+                  std::atomic<int64_t>* total_ops_done_ptr, int gap_sec,
+                  bool triggerTEA, bool triggerFEA, int average_value_size);
+  FEAT_Tuner* GetTuner() { return this->feat_tuner.get(); }
 
  protected:
   const std::string dbname_;
@@ -2131,6 +2137,8 @@ class DBImpl : public DB {
   InstrumentedCondVar atomic_flush_install_cv_;
 
   bool wal_in_db_path_;
+
+  std::shared_ptr<FEAT_Tuner> feat_tuner;
 };
 
 extern Options SanitizeOptions(const std::string& db, const Options& src);

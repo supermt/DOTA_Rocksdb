@@ -7,6 +7,10 @@
 #pragma once
 #include <iostream>
 
+#include "db/db_impl/db_impl.h"
+#include "rocksdb/options.h"
+#include "rocksdb/version.h"
+
 namespace ROCKSDB_NAMESPACE {
 
 enum ThreadStallLevels : int {
@@ -122,37 +126,14 @@ class DOTA_Tuner {
   double idle_threshold = 2.5;
   double FEA_gap_threshold = 1;
   double TEA_slow_flush = 0.5;
-  uint64_t last_non_zero_flush=0;
+  uint64_t last_non_zero_flush = 0;
   void UpdateSystemStats() { UpdateSystemStats(running_db_); }
 
  public:
   DOTA_Tuner(const Options opt, DBImpl* running_db, int64_t* last_report_op_ptr,
              std::atomic<int64_t>* total_ops_done_ptr, Env* env,
-             uint64_t gap_sec)
-      : default_opts(opt),
-        tuning_rounds(0),
-        running_db_(running_db),
-        scores(),
-        gradients(0),
-        current_sec(0),
-        flush_list_accessed(0),
-        compaction_list_accessed(0),
-        last_thread_states(kL0Stall),
-        last_batch_stat(kTinyMemtable),
-        flush_list_from_opt_ptr(running_db->immutable_db_options().flush_stats),
-        compaction_list_from_opt_ptr(
-            running_db->immutable_db_options().job_stats),
-        max_scores(),
-        last_flush_thread_len(0),
-        last_compaction_thread_len(0),
-        env_(env),
-        tuning_gap(gap_sec),
-        core_num(running_db->immutable_db_options().core_number),
-        max_memtable_size(
-            running_db->immutable_db_options().max_memtable_size) {
-    this->last_report_ptr = last_report_op_ptr;
-    this->total_ops_done_ptr_ = total_ops_done_ptr;
-  }
+             uint64_t gap_sec);
+
   void set_idle_ratio(double idle_ra) { idle_threshold = idle_ra; }
   void set_gap_threshold(double ng_threshold) {
     FEA_gap_threshold = ng_threshold;
@@ -212,15 +193,7 @@ class DOTA_Tuner {
   }
 
   void ResetTuner() { tuning_rounds = 0; }
-  void UpdateSystemStats(DBImpl* running_db) {
-    current_opt = running_db->GetOptions();
-    version = running_db->GetVersionSet()
-                  ->GetColumnFamilySet()
-                  ->GetDefault()
-                  ->current();
-    cfd = version->cfd();
-    vfs = version->storage_info();
-  }
+  void UpdateSystemStats(DBImpl* running_db);
   virtual void DetectTuningOperations(int secs_elapsed,
                                       std::vector<ChangePoint>* change_list);
 
@@ -264,20 +237,8 @@ class FEAT_Tuner : public DOTA_Tuner {
  public:
   FEAT_Tuner(const Options opt, DBImpl* running_db, int64_t* last_report_op_ptr,
              std::atomic<int64_t>* total_ops_done_ptr, Env* env, int gap_sec,
-             bool triggerTEA, bool triggerFEA)
-      : DOTA_Tuner(opt, running_db, last_report_op_ptr, total_ops_done_ptr, env,
-                   gap_sec),
-        TEA_enable(triggerTEA),
-        FEA_enable(triggerFEA),
-        current_stage(kSlowStart) {
-    flush_list_from_opt_ptr =
-        this->running_db_->immutable_db_options().flush_stats;
+             bool triggerTEA, bool triggerFEA, int average_entry_size);
 
-    std::cout << "Using FEAT tuner.\n FEA is "
-              << (FEA_enable ? "triggered" : "NOT triggered") << std::endl;
-    std::cout << "TEA is " << (TEA_enable ? "triggered" : "NOT triggered")
-              << std::endl;
-  }
   void DetectTuningOperations(int secs_elapsed,
                               std::vector<ChangePoint>* change_list) override;
   ~FEAT_Tuner() override;

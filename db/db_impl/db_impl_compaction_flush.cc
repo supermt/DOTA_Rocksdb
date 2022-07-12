@@ -1175,7 +1175,7 @@ Status DBImpl::ContinueCompactionWork() {
   if (bg_work_paused_ == 0) {
     MaybeScheduleFlushOrCompaction();
   }
- 
+
 //  printf(" ->>>>??? Resuming compaction from DB\n");
 //  InstrumentedMutexLock guard_lock(&mutex_);
 //  if (bg_compaction_paused_ == 0) {

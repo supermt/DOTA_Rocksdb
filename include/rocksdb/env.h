@@ -138,6 +138,9 @@ struct EnvOptions {
 
   // If not nullptr, write rate limiting is enabled for flush and compaction
   RateLimiter* rate_limiter = nullptr;
+
+  bool TEA_enable = false;
+  bool FEA_enable = false;
 };
 
 class Env {

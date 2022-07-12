@@ -38,9 +38,13 @@ void ReporterAgentWithTuning::DetectChangesPoints(int sec_elapsed) {
 }
 
 void ReporterAgentWithTuning::DetectAndTuning(int secs_elapsed) {
+  if (tuner == nullptr) {
+    std::cout << "Tuner released" << std::endl;
+    last_metrics_collect_secs = secs_elapsed;
+    return;
+  }
   if (secs_elapsed % tuning_gap_secs_ == 0) {
     DetectChangesPoints(secs_elapsed);
-    //    this->running_db_->immutable_db_options().job_stats->clear();
     last_metrics_collect_secs = secs_elapsed;
   }
   if (tuning_points.empty() ||
@@ -62,11 +66,12 @@ Status ReporterAgentWithTuning::ReportLine(int secs_elapsed,
   auto s = report_file_->Append(report);
   return s;
 }
-void ReporterAgentWithTuning::UseFEATTuner(bool TEA_enable, bool FEA_enable) {
+void ReporterAgentWithTuning::UseFEATTuner(bool TEA_enable, bool FEA_enable,
+                                           int entry_size) {
   tuner.release();
   tuner.reset(new FEAT_Tuner(options_when_boost, running_db_, &last_report_,
                              &total_ops_done_, env_, tuning_gap_secs_,
-                             TEA_enable, FEA_enable));
+                             TEA_enable, FEA_enable, entry_size));
 };
 
 Status update_db_options(

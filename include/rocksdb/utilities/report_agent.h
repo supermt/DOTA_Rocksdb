@@ -75,7 +75,7 @@ class ReporterAgent {
 
   virtual void InsertNewTuningPoints(ChangePoint point);
 
- protected:
+ public:
   virtual void DetectAndTuning(int secs_elapsed);
   virtual Status ReportLine(int secs_elapsed, int total_ops_done_snapshot);
   Env* env_;
@@ -172,6 +172,7 @@ class ReporterAgentWithTuning : public ReporterAgent {
                           uint64_t report_interval_secs,
                           uint64_t dota_tuning_gap_secs = 1);
   DOTA_Tuner* GetTuner() { return tuner.get(); }
+  DOTA_Tuner* ReleaseTuner() { return tuner.release(); }
   void ApplyChangePointsInstantly(std::vector<ChangePoint>* points);
 
   void DetectChangesPoints(int sec_elapsed);
@@ -184,7 +185,7 @@ class ReporterAgentWithTuning : public ReporterAgent {
   }
 
   Status ReportLine(int secs_elapsed, int total_ops_done_snapshot) override;
-  void UseFEATTuner(bool TEA_enable, bool FEA_enable);
+  void UseFEATTuner(bool TEA_enable, bool FEA_enable, int entry_size);
   //  void print_useless_thing(int secs_elapsed);
   void DetectAndTuning(int secs_elapsed) override;
   enum CongestionStatus {

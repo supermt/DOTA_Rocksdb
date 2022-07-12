@@ -645,8 +645,7 @@ DEFINE_bool(TEA_enable, false, "Trigger FEAT tuner's TEA component");
 DEFINE_int32(SILK_bandwidth_limitation, 200, "MBPS of disk limitation");
 DEFINE_double(idle_rate, 2.15,
               "TEA will decide this as the idle rate of the threads");
-DEFINE_double(FEA_gap_threshold, 1.5,
-              "The negative feedback loop's threshold");
+DEFINE_double(FEA_gap_threshold, 1.5, "The negative feedback loop's threshold");
 DEFINE_double(TEA_slow_flush, 0.5, "The negative feedback loop's threshold");
 DEFINE_double(DOTA_tuning_gap, 1.0, "Tuning gap of the DOTA agent, in secs ");
 
@@ -3887,37 +3886,24 @@ class Benchmark {
 
     std::unique_ptr<ReporterAgent> reporter_agent;
     if (FLAGS_report_interval_seconds > 0) {
-      if (change_point_num > 0 || FLAGS_DOTA_enabled || FLAGS_TEA_enable ||
-          FLAGS_FEA_enable) {
-        // need to use another Report Agent
-        if (FLAGS_DOTA_tuning_gap == 0) {
-          reporter_agent.reset(new ReporterAgentWithTuning(
-              reinterpret_cast<DBImpl*>(db_.db), FLAGS_env, FLAGS_report_file,
-              FLAGS_report_interval_seconds, FLAGS_report_interval_seconds));
-        } else {
-          reporter_agent.reset(new ReporterAgentWithTuning(
-              reinterpret_cast<DBImpl*>(db_.db), FLAGS_env, FLAGS_report_file,
-              FLAGS_report_interval_seconds, FLAGS_DOTA_tuning_gap));
-        }
+      // setup an reporter first?
+
+      if (change_point_num > 0 || FLAGS_TEA_enable || FLAGS_FEA_enable) {
+        reporter_agent.reset(new ReporterAgentWithTuning(
+            reinterpret_cast<DBImpl*>(db_.db), FLAGS_env, FLAGS_report_file,
+            FLAGS_report_interval_seconds, FLAGS_DOTA_tuning_gap));
         auto tuner_agent =
             reinterpret_cast<ReporterAgentWithTuning*>(reporter_agent.get());
-        tuner_agent->UseFEATTuner(FLAGS_TEA_enable, FLAGS_FEA_enable);
-        tuner_agent->GetTuner()->set_idle_ratio(FLAGS_idle_rate);
-        tuner_agent->GetTuner()->set_gap_threshold(FLAGS_FEA_gap_threshold);
-        tuner_agent->GetTuner()->set_slow_flush_threshold(FLAGS_TEA_slow_flush);
+        tuner_agent->ReleaseTuner();
 
-        for (auto point : config_change_points) {
-          reporter_agent->InsertNewTuningPoints(point);
-        }
-      } else if (FLAGS_detailed_running_stats) {
-        reporter_agent.reset(new ReporterWithMoreDetails(
-            reinterpret_cast<DBImpl*>(db_.db), FLAGS_env, FLAGS_report_file,
-            FLAGS_report_interval_seconds));
-      } else if (FLAGS_SILK_triggered) {
-        reporter_agent.reset(new ReporterAgentWithSILK(
-            reinterpret_cast<DBImpl*>(db_.db), FLAGS_env, FLAGS_report_file,
-            FLAGS_report_interval_seconds, FLAGS_value_size,
-            FLAGS_SILK_bandwidth_limitation));
+        DBImpl* running_db = dynamic_cast<DBImpl*>(db_.db);
+        running_db->SetupTuner(
+            &tuner_agent->last_report_, &tuner_agent->total_ops_done_,
+            FLAGS_DOTA_tuning_gap, FLAGS_TEA_enable, FLAGS_FEA_enable,
+            (FLAGS_key_size + FLAGS_value_size + 8));
+        running_db->GetTuner()->set_idle_ratio(FLAGS_idle_rate);
+        running_db->GetTuner()->set_gap_threshold(FLAGS_FEA_gap_threshold);
+        running_db->GetTuner()->set_slow_flush_threshold(FLAGS_TEA_slow_flush);
       } else {
         reporter_agent.reset(new ReporterAgent(FLAGS_env, FLAGS_report_file,
                                                FLAGS_report_interval_seconds));
@@ -5059,7 +5045,8 @@ class Benchmark {
     int64_t ops_per_stage = 1;
 
     // load first, then run
-    Duration loading_duration(FLAGS_load_duration, remain_loading, ops_per_stage);
+    Duration loading_duration(FLAGS_load_duration, remain_loading,
+                              ops_per_stage);
     Duration running_duration(test_duration, remain_running, ops_per_stage);
     int stage = 0;
     //    WriteBatch batch;

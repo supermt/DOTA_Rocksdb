@@ -2,6 +2,8 @@
 // Created by jinghuan on 8/24/21.
 //
 
+#include "rocksdb/utilities/DOTA_tuner.h"
+
 #include <vector>
 
 #include "rocksdb/utilities/report_agent.h"
@@ -100,8 +102,8 @@ SystemScores DOTA_Tuner::ScoreTheSystem() {
     if (i > 1)
       current_score.flush_gap_time +=
           (temp.start_time - flush_list_from_opt_ptr->at(i - 1).start_time);
-    
-    last_non_zero_flush=temp.write_out_bandwidth;
+
+    last_non_zero_flush = temp.write_out_bandwidth;
     //        (double)(current_opt.write_buffer_size >> 20) /
     //                                 (current_score.memtable_speed + 1);
     if (current_score.l0_num > temp.l0_files) {
@@ -181,7 +183,7 @@ SystemScores DOTA_Tuner::ScoreTheSystem() {
   // flush threads always get 1/4 of all
   current_score.compaction_idle_time /=
       (current_opt.max_background_jobs * kMicrosInSecond * 3 / 4);
-  
+
   // clean up
   flush_list_accessed = flush_result_length;
   compaction_list_accessed = compaction_result_length;
@@ -322,6 +324,43 @@ void DOTA_Tuner::FillUpChangeList(std::vector<ChangePoint> *change_list,
   }
 }
 
+DOTA_Tuner::DOTA_Tuner(const Options opt, DBImpl *running_db,
+                       int64_t *last_report_op_ptr,
+                       std::atomic<int64_t> *total_ops_done_ptr, Env *env,
+                       uint64_t gap_sec)
+    : default_opts(opt),
+      tuning_rounds(0),
+      running_db_(running_db),
+      scores(),
+      gradients(0),
+      current_sec(0),
+      flush_list_accessed(0),
+      compaction_list_accessed(0),
+      last_thread_states(kL0Stall),
+      last_batch_stat(kTinyMemtable),
+      flush_list_from_opt_ptr(running_db->immutable_db_options().flush_stats),
+      compaction_list_from_opt_ptr(
+          running_db->immutable_db_options().job_stats),
+      max_scores(),
+      last_flush_thread_len(0),
+      last_compaction_thread_len(0),
+      env_(env),
+      tuning_gap(gap_sec),
+      core_num(running_db->immutable_db_options().core_number),
+      max_memtable_size(running_db->immutable_db_options().max_memtable_size) {
+  this->last_report_ptr = last_report_op_ptr;
+  this->total_ops_done_ptr_ = total_ops_done_ptr;
+}
+void DOTA_Tuner::UpdateSystemStats(DBImpl *running_db) {
+  current_opt = running_db->GetOptions();
+  version = running_db->GetVersionSet()
+                ->GetColumnFamilySet()
+                ->GetDefault()
+                ->current();
+  cfd = version->cfd();
+  vfs = version->storage_info();
+}
+
 SystemScores SystemScores::operator-(const SystemScores &a) {
   SystemScores temp;
 
@@ -436,16 +475,16 @@ SystemScores FEAT_Tuner::normalize(SystemScores &origin_score) {
 TuningOP FEAT_Tuner::TuneByTEA() {
   // the flushing speed is low.
   TuningOP result{kKeep, kLinearIncrease};
-  if (current_score_.flush_speed_avg ==0 ){ 
-        current_score_.flush_speed_avg = last_non_zero_flush;
+  if (current_score_.flush_speed_avg == 0) {
+    current_score_.flush_speed_avg = last_non_zero_flush;
   }
   //  if (current_score_.immutable_number >= 1) {
   //    //      &&      current_score_.flush_speed_avg != 0) {
   //    result.ThreadOp = kLinearIncrease;
   //  }
-  if (current_score_.memtable_speed > 
-      current_score_.flush_speed_avg * TEA_slow_flush || current_score_.memtable_speed == 0) {
-
+  if (current_score_.memtable_speed >
+          current_score_.flush_speed_avg * TEA_slow_flush ||
+      current_score_.memtable_speed == 0) {
     result.ThreadOp = kHalf;
     std::cout << "slow flush decrease, thread" << std::endl;
   }
@@ -455,7 +494,8 @@ TuningOP FEAT_Tuner::TuneByTEA() {
     std::cout << "idle threads decrease, thread" << std::endl;
   }
 
-  if (current_score_.estimate_compaction_bytes >= 1 || current_score_.l0_num >=1) {
+  if (current_score_.estimate_compaction_bytes >= 1 ||
+      current_score_.l0_num >= 1) {
     result.ThreadOp = kLinearIncrease;
     std::cout << "lo/ro increase, thread" << std::endl;
   }
@@ -476,7 +516,8 @@ TuningOP FEAT_Tuner::TuneByFEA() {
   }
 
   if (current_score_.memtable_speed >
-      current_score_.flush_speed_avg * TEA_slow_flush || current_score_.immutable_number>1) {
+          current_score_.flush_speed_avg * TEA_slow_flush ||
+      current_score_.immutable_number > 1) {
     negative_protocol.BatchOp = kLinearIncrease;
     std::cout << "slow flushing, increase" << std::endl;
   }
@@ -487,7 +528,7 @@ TuningOP FEAT_Tuner::TuneByFEA() {
     std::cout << "lo/ro increase" << std::endl;
   }
 
-  if (current_score_.flush_idle_time > idle_threshold*0.2) {
+  if (current_score_.flush_idle_time > idle_threshold * 0.2) {
     negative_protocol.BatchOp = kKeep;
     std::cout << "flush is idle, keep the threads" << std::endl;
   }
@@ -500,6 +541,24 @@ void FEAT_Tuner::CalculateAvgScore() {
   }
   if (scores.size() > 0) result = result / scores.size();
   this->avg_scores = result;
+}
+FEAT_Tuner::FEAT_Tuner(const Options opt, DBImpl *running_db,
+                       int64_t *last_report_op_ptr,
+                       std::atomic<int64_t> *total_ops_done_ptr, Env *env,
+                       int gap_sec, bool triggerTEA, bool triggerFEA,
+                       int average_entry_size)
+    : DOTA_Tuner(opt, running_db, last_report_op_ptr, total_ops_done_ptr, env,
+                 gap_sec),
+      TEA_enable(triggerTEA),
+      FEA_enable(triggerFEA),
+      current_stage(kSlowStart) {
+  flush_list_from_opt_ptr =
+      this->running_db_->immutable_db_options().flush_stats;
+
+  std::cout << "Using FEAT tuner.\n FEA is "
+            << (FEA_enable ? "triggered" : "NOT triggered") << std::endl;
+  std::cout << "TEA is " << (TEA_enable ? "triggered" : "NOT triggered")
+            << std::endl;
 }
 
 }  // namespace ROCKSDB_NAMESPACE
