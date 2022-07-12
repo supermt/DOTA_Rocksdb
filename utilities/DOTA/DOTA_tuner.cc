@@ -560,7 +560,8 @@ FEAT_Tuner::FEAT_Tuner(const Options opt, DBImpl *running_db,
                  gap_sec),
       TEA_enable(triggerTEA),
       FEA_enable(triggerFEA),
-      current_stage(kSlowStart) {
+      current_stage(kSlowStart),
+      entry_size(average_entry_size) {
   flush_list_from_opt_ptr =
       this->running_db_->immutable_db_options().flush_stats;
 

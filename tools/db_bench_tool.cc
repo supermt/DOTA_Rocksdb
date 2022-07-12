@@ -3896,7 +3896,7 @@ class Benchmark {
             reinterpret_cast<ReporterAgentWithTuning*>(reporter_agent.get());
         tuner_agent->ReleaseTuner();
 
-        DBImpl* running_db = dynamic_cast<DBImpl*>(db_.db);
+        DBImpl* running_db = static_cast<DBImpl*>(db_.db);
         running_db->SetupTuner(
             &tuner_agent->last_report_, &tuner_agent->total_ops_done_,
             FLAGS_DOTA_tuning_gap, FLAGS_TEA_enable, FLAGS_FEA_enable,

@@ -266,6 +266,7 @@ class FEAT_Tuner : public DOTA_Tuner {
   bool applying_changes;
   //  int double_ratio = 4;
   SystemScores normalize(SystemScores& origin_score);
+  int entry_size;
 
   inline const char* StageString(Stage v) {
     switch (v) {
