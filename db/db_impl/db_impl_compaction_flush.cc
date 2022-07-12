@@ -134,6 +134,14 @@ IOStatus DBImpl::SyncClosedLogs(JobContext* job_context) {
   return io_s;
 }
 
+Status DetectChanges(FEAT_Tuner* tuner) {
+  Status s;
+  std::vector<ChangePoint> change_points;
+  tuner->DetectTuningOperations(-1, &change_points);
+  s = tuner->ApplyChangePoints(&change_points);
+  return s.OK();
+}
+
 Status DBImpl::FlushMemTableToOutputFile(
     ColumnFamilyData* cfd, const MutableCFOptions& mutable_cf_options,
     bool* made_progress, JobContext* job_context,
@@ -240,6 +248,14 @@ Status DBImpl::FlushMemTableToOutputFile(
 #endif  // ROCKSDB_LITE
   }
   TEST_SYNC_POINT("DBImpl::FlushMemTableToOutputFile:Finish");
+
+  std::cout << "flush just finished" << std::endl;
+  //
+  //  // trigger FEAT tuner when a flush job is finished
+  //  cfd->RecalculateWriteStallConditions(mutable_cf_options);
+
+  std::thread t(DetectChanges, feat_tuner.get());
+  t.detach();
   return s;
 }
 
@@ -1151,17 +1167,17 @@ Status DBImpl::PauseCompactionWork() {
   }
   bg_work_paused_++;
 
-//  printf(" ->>>>??? Pausing compaction from DB\n");
-//  InstrumentedMutexLock guard_lock(&mutex_);
-//  bg_compaction_paused_++;
-//  while (bg_compaction_scheduled_ > 0) {
-//    bg_cv_.Wait();
-//  }
-//  bg_compaction_paused_++;
+  //  printf(" ->>>>??? Pausing compaction from DB\n");
+  //  InstrumentedMutexLock guard_lock(&mutex_);
+  //  bg_compaction_paused_++;
+  //  while (bg_compaction_scheduled_ > 0) {
+  //    bg_cv_.Wait();
+  //  }
+  //  bg_compaction_paused_++;
   return Status::OK();
 }
 Status DBImpl::ContinueCompactionWork() {
-//
+  //
   InstrumentedMutexLock guard_lock(&mutex_);
   if (bg_work_paused_ == 0) {
     return Status::InvalidArgument();
@@ -1176,19 +1192,19 @@ Status DBImpl::ContinueCompactionWork() {
     MaybeScheduleFlushOrCompaction();
   }
 
-//  printf(" ->>>>??? Resuming compaction from DB\n");
-//  InstrumentedMutexLock guard_lock(&mutex_);
-//  if (bg_compaction_paused_ == 0) {
-//    return Status::InvalidArgument();
-//  }
-//  assert(bg_compaction_paused_ > 0);
-//  assert(bg_work_paused_ > 0);
-//  bg_compaction_paused_--;
-//  // It's sufficient to check just bg_work_paused_ here since
-//  // bg_work_paused_ is always no greater than bg_compaction_paused_
-//  if (bg_compaction_paused_ == 0) {
-//    MaybeScheduleFlushOrCompaction();
-//  }
+  //  printf(" ->>>>??? Resuming compaction from DB\n");
+  //  InstrumentedMutexLock guard_lock(&mutex_);
+  //  if (bg_compaction_paused_ == 0) {
+  //    return Status::InvalidArgument();
+  //  }
+  //  assert(bg_compaction_paused_ > 0);
+  //  assert(bg_work_paused_ > 0);
+  //  bg_compaction_paused_--;
+  //  // It's sufficient to check just bg_work_paused_ here since
+  //  // bg_work_paused_ is always no greater than bg_compaction_paused_
+  //  if (bg_compaction_paused_ == 0) {
+  //    MaybeScheduleFlushOrCompaction();
+  //  }
   return Status::OK();
 }
 

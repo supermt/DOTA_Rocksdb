@@ -126,7 +126,9 @@ class DOTA_Tuner {
   double idle_threshold = 2.5;
   double FEA_gap_threshold = 1;
   double TEA_slow_flush = 0.5;
-  uint64_t last_non_zero_flush = 0;
+  const uint64_t start_micros;
+  uint64_t last_micros = 0;
+
   void UpdateSystemStats() { UpdateSystemStats(running_db_); }
 
  public:
@@ -246,6 +248,8 @@ class FEAT_Tuner : public DOTA_Tuner {
   TuningOP TuneByTEA();
   TuningOP TuneByFEA();
 
+  Status ApplyChangePoints(std::vector<ChangePoint>* points);
+
  private:
   bool TEA_enable;
   bool FEA_enable;
@@ -258,8 +262,8 @@ class FEAT_Tuner : public DOTA_Tuner {
   double RO_threshold = 0.8;
   double LO_threshold = 0.7;
   double MO_threshold = 0.5;
-  double batch_changing_frequency = 0.7;
   int congestion_threads = min_thread;
+  bool applying_changes;
   //  int double_ratio = 4;
   SystemScores normalize(SystemScores& origin_score);
 

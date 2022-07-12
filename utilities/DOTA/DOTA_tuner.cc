@@ -80,6 +80,14 @@ SystemScores DOTA_Tuner::ScoreTheSystem() {
 
   uint64_t total_mem_size = 0;
   uint64_t active_mem = 0;
+
+  uint64_t duration_micros = 0;
+  if (last_micros != 0) {
+    duration_micros = env_->NowMicros() - last_micros;
+  } else {
+    duration_micros = env_->NowMicros() - start_micros;
+  }
+
   running_db_->GetIntProperty("rocksdb.size-all-mem-tables", &total_mem_size);
   running_db_->GetIntProperty("rocksdb.cur-size-active-mem-table", &active_mem);
 
@@ -103,15 +111,16 @@ SystemScores DOTA_Tuner::ScoreTheSystem() {
       current_score.flush_gap_time +=
           (temp.start_time - flush_list_from_opt_ptr->at(i - 1).start_time);
 
-    last_non_zero_flush = temp.write_out_bandwidth;
     //        (double)(current_opt.write_buffer_size >> 20) /
     //                                 (current_score.memtable_speed + 1);
     if (current_score.l0_num > temp.l0_files) {
       current_score.l0_num = temp.l0_files;
     }
   }
+
   int l0_compaction = 0;
   auto num_new_flushes = (flush_result_length - flush_list_accessed);
+  assert(num_new_flushes >= 1);
   current_score.flush_numbers = num_new_flushes;
 
   while (total_mem_size < last_unflushed_bytes) {
@@ -119,8 +128,9 @@ SystemScores DOTA_Tuner::ScoreTheSystem() {
   }
   current_score.memtable_speed += (total_mem_size - last_unflushed_bytes);
 
-  current_score.memtable_speed /= tuning_gap;
-  current_score.memtable_speed /= kMicrosInSecond;  // we use MiB to calculate
+  current_score.memtable_speed /= duration_micros;  // MiB
+  //  current_score.memtable_speed /= kMicrosInSecond;  // we use MiB to
+  //  calculate
 
   uint64_t max_pending_bytes = 0;
 
@@ -179,16 +189,18 @@ SystemScores DOTA_Tuner::ScoreTheSystem() {
     current_score.compaction_idle_time += value;
   }
   current_score.flush_idle_time /=
-      (current_opt.max_background_jobs * kMicrosInSecond / 4);
+      (double)(current_opt.max_background_flushes * duration_micros);
   // flush threads always get 1/4 of all
   current_score.compaction_idle_time /=
-      (current_opt.max_background_jobs * kMicrosInSecond * 3 / 4);
+      (double)(current_opt.max_background_compactions * duration_micros);
 
   // clean up
   flush_list_accessed = flush_result_length;
   compaction_list_accessed = compaction_result_length;
   last_compaction_thread_len = compaction_thread_idle_list.size();
   last_flush_thread_len = flush_thread_idle_list.size();
+
+  last_micros = env_->NowMicros();
   return current_score;
 }
 
@@ -346,6 +358,7 @@ DOTA_Tuner::DOTA_Tuner(const Options opt, DBImpl *running_db,
       last_compaction_thread_len(0),
       env_(env),
       tuning_gap(gap_sec),
+      start_micros(env->NowMicros()),
       core_num(running_db->immutable_db_options().core_number),
       max_memtable_size(running_db->immutable_db_options().max_memtable_size) {
   this->last_report_ptr = last_report_op_ptr;
@@ -447,15 +460,19 @@ void FEAT_Tuner::DetectTuningOperations(int /*secs_elapsed*/,
   CalculateAvgScore();
 
   current_score_ = current_score;
-  //  std::cout << current_score_.memtable_speed << "/" <<
-  //  avg_scores.memtable_speed
-  //            << std::endl;
+  std::cout << "Memtable: " << current_score_.memtable_speed << "/"
+            << avg_scores.memtable_speed << std::endl;
+  std::cout << "Flush speed: " << current_score_.flush_speed_avg << "/"
+            << avg_scores.flush_speed_avg << std::endl;
+  std::cout << "Flush idle: " << current_score_.flush_idle_time << "/"
+            << avg_scores.flush_idle_time << std::endl;
+  std::cout << "Compaction idle: " << current_score_.compaction_idle_time << "/"
+            << avg_scores.compaction_idle_time << std::endl;
 
-  if (current_score_.memtable_speed < avg_scores.memtable_speed * 0.5 &&
-      current_score_.immutable_number >= 1) {
+  // For FEAT 9, the flush speed is always larger than 0
+  if (current_score_.memtable_speed <
+      avg_scores.memtable_speed * TEA_slow_flush) {
     //<=avg_scores.memtable_speed * TEA_slow_flush) {
-    if (current_score.flush_speed_avg == 0 && current_score.memtable_speed > 0)
-      return;
     TuningOP result{kKeep, kKeep};
     if (TEA_enable) {
       result = TuneByTEA();
@@ -475,16 +492,8 @@ SystemScores FEAT_Tuner::normalize(SystemScores &origin_score) {
 TuningOP FEAT_Tuner::TuneByTEA() {
   // the flushing speed is low.
   TuningOP result{kKeep, kLinearIncrease};
-  if (current_score_.flush_speed_avg == 0) {
-    current_score_.flush_speed_avg = last_non_zero_flush;
-  }
-  //  if (current_score_.immutable_number >= 1) {
-  //    //      &&      current_score_.flush_speed_avg != 0) {
-  //    result.ThreadOp = kLinearIncrease;
-  //  }
-  if (current_score_.memtable_speed >
-          current_score_.flush_speed_avg * TEA_slow_flush ||
-      current_score_.memtable_speed == 0) {
+  if (current_score_.flush_speed_avg <
+      current_score_.flush_speed_avg * TEA_slow_flush) {
     result.ThreadOp = kHalf;
     std::cout << "slow flush decrease, thread" << std::endl;
   }
@@ -559,6 +568,47 @@ FEAT_Tuner::FEAT_Tuner(const Options opt, DBImpl *running_db,
             << (FEA_enable ? "triggered" : "NOT triggered") << std::endl;
   std::cout << "TEA is " << (TEA_enable ? "triggered" : "NOT triggered")
             << std::endl;
+}
+
+Status FEAT_Tuner::ApplyChangePoints(std::vector<ChangePoint> *points) {
+  std::unordered_map<std::string, std::string> *new_cf_options;
+  std::unordered_map<std::string, std::string> *new_db_options;
+  new_cf_options = new std::unordered_map<std::string, std::string>();
+  new_db_options = new std::unordered_map<std::string, std::string>();
+  Status s;
+  if (points->empty()) {
+    return s.OK();
+  }
+
+  for (auto point : *points) {
+    if (point.db_width) {
+      new_db_options->emplace(point.opt, point.value);
+    } else {
+      new_cf_options->emplace(point.opt, point.value);
+    }
+  }
+  points->clear();
+
+  if (!new_db_options->empty()) {
+    //    std::thread t();
+    applying_changes = true;
+    s = running_db_->SetDBOptions(*new_db_options);
+    free(new_db_options);
+    applying_changes = false;
+    if (!s.ok()) {
+      return s;
+    }
+  }
+  if (!new_cf_options->empty()) {
+    applying_changes = true;
+    s = running_db_->SetOptions(*new_cf_options);
+    if (!s.ok()) {
+      return s;
+    }
+    free(new_cf_options);
+    applying_changes = false;
+  }
+  return s.OK();
 }
 
 }  // namespace ROCKSDB_NAMESPACE

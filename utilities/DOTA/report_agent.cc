@@ -39,7 +39,7 @@ void ReporterAgentWithTuning::DetectChangesPoints(int sec_elapsed) {
 
 void ReporterAgentWithTuning::DetectAndTuning(int secs_elapsed) {
   if (tuner == nullptr) {
-    std::cout << "Tuner released" << std::endl;
+    //    std::cout << "Tuner released" << std::endl;
     last_metrics_collect_secs = secs_elapsed;
     return;
   }
