@@ -249,13 +249,14 @@ Status DBImpl::FlushMemTableToOutputFile(
   }
   TEST_SYNC_POINT("DBImpl::FlushMemTableToOutputFile:Finish");
 
-  std::cout << "flush just finished" << std::endl;
+  //  std::cout << "flush just finished" << std::endl;
+  if (feat_tuner.get()) {
+    std::thread t(DetectChanges, feat_tuner.get());
+    t.detach();
+  }
   //
   //  // trigger FEAT tuner when a flush job is finished
   //  cfd->RecalculateWriteStallConditions(mutable_cf_options);
-
-  std::thread t(DetectChanges, feat_tuner.get());
-  t.detach();
   return s;
 }
 
