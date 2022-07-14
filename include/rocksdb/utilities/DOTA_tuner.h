@@ -34,6 +34,7 @@ struct SystemScores {
   int immutable_number;      // NonFlush number
   // Flushing
   double flush_speed_avg;
+  double flush_min;
   double flush_speed_var;
   // Compaction speed
   double l0_num;
@@ -54,6 +55,7 @@ struct SystemScores {
     active_size_ratio = 0.0;
     immutable_number = 0;
     flush_speed_avg = 0.0;
+    flush_min = 99999999.9;
     flush_speed_var = 0.0;
     l0_num = 0.0;
     l0_drop_ratio = 0.0;
@@ -68,6 +70,7 @@ struct SystemScores {
     active_size_ratio = 0.0;
     immutable_number = 0;
     flush_speed_avg = 0.0;
+    flush_min = 99999999.9;
     flush_speed_var = 0.0;
     l0_num = 0.0;
     l0_drop_ratio = 0.0;
@@ -250,6 +253,8 @@ class FEAT_Tuner : public DOTA_Tuner {
 
   Status ApplyChangePoints(std::vector<ChangePoint>* points);
 
+  bool IsBusy();
+
  private:
   bool TEA_enable;
   bool FEA_enable;
@@ -263,7 +268,7 @@ class FEAT_Tuner : public DOTA_Tuner {
   double LO_threshold = 0.7;
   double MO_threshold = 0.5;
   int congestion_threads = min_thread;
-  bool applying_changes;
+  bool applying_changes = false;
   //  int double_ratio = 4;
   SystemScores normalize(SystemScores& origin_score);
   int entry_size;
