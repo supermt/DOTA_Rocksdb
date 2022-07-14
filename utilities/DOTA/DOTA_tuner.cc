@@ -513,7 +513,8 @@ TuningOP FEAT_Tuner::TuneByTEA() {
   }
 
   if (current_score_.compaction_idle_time / avg_scores.compaction_idle_time >
-      idle_threshold) {
+          idle_threshold ||
+      current_score_.compaction_idle_time == 0) {
     result.ThreadOp = kHalf;
     std::cout << "idle threads, thread decrease" << std::endl;
   }
