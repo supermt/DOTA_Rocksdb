@@ -462,42 +462,40 @@ void FEAT_Tuner::DetectTuningOperations(int /*secs_elapsed*/,
     scores.pop_front();
   }
   CalculateAvgScore();
-
-  current_score_ = current_score;
-  std::cout << "Memtable: " << current_score_.memtable_speed << "/"
-            << avg_scores.memtable_speed << " / " << max_scores.memtable_speed
-            << std::endl;
-
-  std::cout << "Flush speed: " << current_score_.flush_speed_avg << "/"
-            << avg_scores.flush_speed_avg << max_scores.flush_speed_avg
-            << std::endl;
-
-  std::cout << "Flush idle: " << current_score_.flush_idle_time << "/"
-            << avg_scores.flush_idle_time << " ratio: "
-            << current_score.flush_idle_time / avg_scores.flush_idle_time
-            << std::endl;
-  if (avg_scores.compaction_idle_time > 0) {
-    std::cout << "Compaction idle: " << current_score_.compaction_idle_time
-              << "/" << avg_scores.compaction_idle_time << "idle ratio: "
-              << current_score.compaction_idle_time /
-                     avg_scores.compaction_idle_time
-              << std::endl;
-  }
+  //
+  //  current_score_ = current_score;
+  //  std::cout << "Memtable: " << current_score_.memtable_speed << "/"
+  //            << avg_scores.memtable_speed << " / " <<
+  //            max_scores.memtable_speed
+  //            << std::endl;
+  //
+  //  std::cout << "Flush speed: " << current_score_.flush_speed_avg << "/"
+  //            << avg_scores.flush_speed_avg << max_scores.flush_speed_avg
+  //            << std::endl;
+  //
+  //  std::cout << "Flush idle: " << current_score_.flush_idle_time << "/"
+  //            << avg_scores.flush_idle_time << " ratio: "
+  //            << current_score.flush_idle_time / avg_scores.flush_idle_time
+  //            << std::endl;
+  //  if (avg_scores.compaction_idle_time > 0) {
+  //    std::cout << "Compaction idle: " << current_score_.compaction_idle_time
+  //              << "/" << avg_scores.compaction_idle_time << "idle ratio: "
+  //              << current_score.compaction_idle_time /
+  //                     avg_scores.compaction_idle_time
+  //              << std::endl;
+  //}
 
   // For FEAT 9, the flush speed is always larger than 0
-  if (current_score_.memtable_speed <
-      avg_scores.memtable_speed * TEA_slow_flush) {
-    //<=avg_scores.memtable_speed * TEA_slow_flush) {
-    TuningOP result{kKeep, kKeep};
-    if (TEA_enable) {
-      result = TuneByTEA();
-    }
-    if (FEA_enable) {
-      TuningOP fea_result = TuneByFEA();
-      result.BatchOp = fea_result.BatchOp;
-    }
-    FillUpChangeList(change_list, result);
+  //<=avg_scores.memtable_speed * TEA_slow_flush) {
+  TuningOP result{kKeep, kKeep};
+  if (TEA_enable) {
+    result = TuneByTEA();
   }
+  if (FEA_enable) {
+    TuningOP fea_result = TuneByFEA();
+    result.BatchOp = fea_result.BatchOp;
+  }
+  FillUpChangeList(change_list, result);
 }
 
 SystemScores FEAT_Tuner::normalize(SystemScores &origin_score) {
