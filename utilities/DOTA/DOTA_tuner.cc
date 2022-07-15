@@ -180,7 +180,6 @@ SystemScores DOTA_Tuner::ScoreTheSystem() {
       (double)max_pending_bytes /
       current_opt.soft_pending_compaction_bytes_limit;
 
-
   init_cpu_processing();
   current_score.average_cpu_utils = GetCurrentValue();
   // clean up
@@ -430,6 +429,9 @@ void FEAT_Tuner::DetectTuningOperations(int /*secs_elapsed*/,
                                         std::vector<ChangePoint> *change_list) {
   //   first, we tune only when the flushing speed is slower than before
   //  UpdateSystemStats();
+  if (tuning_rounds % tuned_round != 0) {
+    return;
+  }
   current_score_ = this->ScoreTheSystem();
   scores.push_back(current_score_);
   if (scores.size() == 1) {
@@ -464,7 +466,8 @@ void FEAT_Tuner::DetectTuningOperations(int /*secs_elapsed*/,
 
   // For FEAT 9, the flush speed is always larger than 0
   //<=avg_scores.memtable_speed * TEA_slow_flush) {
-  if (current_score_.memtable_speed < avg_scores.memtable_speed * 0.5 || avg_scores.average_cpu_utils < 0.25) {
+  if (current_score_.memtable_speed < avg_scores.memtable_speed * 0.5 ||
+      avg_scores.average_cpu_utils < 0.25) {
     TuningOP result{kKeep, kKeep};
     if (TEA_enable) {
       result = TuneByTEA();
@@ -520,9 +523,10 @@ TuningOP FEAT_Tuner::TuneByFEA() {
     negative_protocol.BatchOp = kLinearIncrease;
     std::cout << "lo/ro increase batch" << std::endl;
   }
-  
+
   if (current_score_.average_cpu_utils / avg_scores.average_cpu_utils <
-      idle_threshold || current_score_.average_cpu_utils < 0.25) {
+          idle_threshold ||
+      current_score_.average_cpu_utils < 0.25) {
     negative_protocol.BatchOp = kHalf;
     std::cout << "idle threads, reduce batch" << std::endl;
   }
@@ -627,6 +631,7 @@ double DOTA_Tuner::GetCurrentValue() {
       timeSample.tms_utime < lastUserCPU) {
     // Overflow detection. Just skip this value.
     percent = 1.0;
+    skip++;
   } else {
     percent = (timeSample.tms_stime - lastSysCPU) +
               (timeSample.tms_utime - lastUserCPU);

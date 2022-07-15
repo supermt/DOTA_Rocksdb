@@ -47,7 +47,7 @@ struct SystemScores {
   double flush_idle_time;
   double flush_gap_time;
   double average_cpu_utils;  // calculate by idle calculating,flush and
-                                // compaction stats separately
+                             // compaction stats separately
   int flush_numbers;
 
   SystemScores() {
@@ -129,6 +129,8 @@ class DOTA_Tuner {
   double TEA_slow_flush = 0.5;
   const uint64_t start_micros;
   uint64_t last_micros = 0;
+  int skip = 1;
+  int tuned_round = 0;
 
   void init_cpu_processing();
   double GetCurrentValue();
