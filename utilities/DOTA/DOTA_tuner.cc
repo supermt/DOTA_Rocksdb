@@ -180,16 +180,6 @@ SystemScores DOTA_Tuner::ScoreTheSystem() {
       (double)max_pending_bytes /
       current_opt.soft_pending_compaction_bytes_limit;
 
-  auto flush_current_idle_time = env_->GetThreadPoolWaitingTime(Env::HIGH);
-  auto compaction_current_wait_time = env_->GetThreadPoolWaitingTime(Env::LOW);
-
-  int flush_thread_num = (current_opt.max_background_jobs + 1) / 4;
-  current_score.flush_idle_time /= (double)(current_opt.max_background_jobs *
-                                            flush_thread_num * duration_micros);
-  auto num_new_compaction = compaction_result_length - compaction_list_accessed;
-
-  //  current_score.flush_idle_time = flush_current_idle_time;
-  //  current_score.average_cpu_utils = compaction_current_wait_time;
 
   init_cpu_processing();
   current_score.average_cpu_utils = GetCurrentValue();
@@ -474,7 +464,7 @@ void FEAT_Tuner::DetectTuningOperations(int /*secs_elapsed*/,
 
   // For FEAT 9, the flush speed is always larger than 0
   //<=avg_scores.memtable_speed * TEA_slow_flush) {
-  if (current_score_.memtable_speed < avg_scores.memtable_speed * 0.5) {
+  if (current_score_.memtable_speed < avg_scores.memtable_speed * 0.5 || avg_scores.average_cpu_utils < 0.25) {
     TuningOP result{kKeep, kKeep};
     if (TEA_enable) {
       result = TuneByTEA();
@@ -528,13 +518,16 @@ TuningOP FEAT_Tuner::TuneByFEA() {
   if (current_score_.estimate_compaction_bytes >= 1 ||
       current_score_.l0_num >= 1) {
     negative_protocol.BatchOp = kLinearIncrease;
-    std::cout << "lo/ro increase" << std::endl;
+    std::cout << "lo/ro increase batch" << std::endl;
   }
-
+  
   if (current_score_.average_cpu_utils / avg_scores.average_cpu_utils <
-      idle_threshold) {
+      idle_threshold || current_score_.average_cpu_utils < 0.25) {
     negative_protocol.BatchOp = kHalf;
     std::cout << "idle threads, reduce batch" << std::endl;
+  }
+  if (current_score_.average_cpu_utils < 0) {
+    negative_protocol.BatchOp = kLinearIncrease;
   }
   return negative_protocol;
 }
@@ -633,13 +626,12 @@ double DOTA_Tuner::GetCurrentValue() {
   if (now <= lastCPU || timeSample.tms_stime < lastSysCPU ||
       timeSample.tms_utime < lastUserCPU) {
     // Overflow detection. Just skip this value.
-    percent = -1.0;
+    percent = 1.0;
   } else {
     percent = (timeSample.tms_stime - lastSysCPU) +
               (timeSample.tms_utime - lastUserCPU);
     percent /= (now - lastCPU);
     percent /= numProcessors;
-    percent *= 100;
   }
   lastCPU = now;
   lastSysCPU = timeSample.tms_stime;

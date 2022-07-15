@@ -213,10 +213,10 @@ void ThreadPoolImpl::Impl::BGThread(size_t thread_id) {
     // Stop waiting if the thread needs to do work or needs to terminate.
     while (!exit_all_threads_ && !IsLastExcessiveThread(thread_id) &&
            (queue_.empty() || IsExcessiveThread(thread_id))) {
-      waiting_time = env_->NowMicros() - before_waiting;
       bgsignal_.wait(lock);
     }
 
+    waiting_time = env_->NowMicros() - before_waiting;
     thread_waiting_time += waiting_time;
 
     if (exit_all_threads_) {  // mechanism to let BG threads exit safely
