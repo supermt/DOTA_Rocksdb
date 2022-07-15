@@ -429,7 +429,8 @@ void FEAT_Tuner::DetectTuningOperations(int /*secs_elapsed*/,
                                         std::vector<ChangePoint> *change_list) {
   //   first, we tune only when the flushing speed is slower than before
   //  UpdateSystemStats();
-  if (tuning_rounds % tuned_round != 0) {
+  tuning_rounds++;
+  if (tuning_rounds % skip != 0) {
     return;
   }
   current_score_ = this->ScoreTheSystem();

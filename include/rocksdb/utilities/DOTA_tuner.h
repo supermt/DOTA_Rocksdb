@@ -130,7 +130,6 @@ class DOTA_Tuner {
   const uint64_t start_micros;
   uint64_t last_micros = 0;
   int skip = 1;
-  int tuned_round = 0;
 
   void init_cpu_processing();
   double GetCurrentValue();
