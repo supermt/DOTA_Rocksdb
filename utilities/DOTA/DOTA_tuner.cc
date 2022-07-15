@@ -4,6 +4,11 @@
 
 #include "rocksdb/utilities/DOTA_tuner.h"
 
+#include <sys/times.h>
+#include <sys/vtimes.h>
+
+#include <cstdio>
+#include <cstdlib>
 #include <vector>
 
 #include "rocksdb/utilities/report_agent.h"
@@ -52,7 +57,7 @@ ThreadStallLevels DOTA_Tuner::LocateThreadStates(SystemScores &score) {
     } else if (score.estimate_compaction_bytes > 0.5) {
       return kPendingBytes;
     }
-  } else if (score.compaction_idle_time > 2.5) {
+  } else if (score.average_cpu_utils > 2.5) {
     return kIdle;
   }
   return kGoodArea;
@@ -107,7 +112,7 @@ SystemScores DOTA_Tuner::ScoreTheSystem() {
     flush_metric_list.push_back(temp);
     current_score.flush_speed_avg += temp.write_out_bandwidth;
     current_score.disk_bandwidth += temp.total_bytes;
-    current_score.memtable_speed += temp.total_bytes;
+    //    current_score.memtable_speed += temp.total_bytes;
     current_score.flush_min =
         std::min(current_score.flush_min, temp.write_out_bandwidth);
     if (i > 1)
@@ -123,13 +128,17 @@ SystemScores DOTA_Tuner::ScoreTheSystem() {
   auto num_new_flushes = (flush_result_length - flush_list_accessed);
   assert(num_new_flushes >= 1);
   current_score.flush_numbers = num_new_flushes;
-
-  while (total_mem_size < last_unflushed_bytes) {
-    total_mem_size += current_opt.write_buffer_size;
-  }
-  current_score.memtable_speed += (active_mem);
+  //  auto temp_memsize = total_mem_size;
+  auto total_free_space =
+      current_opt.write_buffer_size * current_opt.max_write_buffer_number;
+  assert(total_free_space > total_mem_size);
+  last_unflushed_bytes = total_free_space - total_mem_size;
+  //  while (total_mem_size < last_unflushed_bytes) {
+  //    total_mem_size += current_opt.write_buffer_size;
+  //  }
+  current_score.memtable_speed += last_unflushed_bytes + active_mem;
   current_score.memtable_speed /= duration_micros;  // MiB
-  last_unflushed_bytes = total_mem_size;
+  //  last_unflushed_bytes = temp_memsize;
 
   uint64_t max_pending_bytes = 0;
 
@@ -171,34 +180,22 @@ SystemScores DOTA_Tuner::ScoreTheSystem() {
       (double)max_pending_bytes /
       current_opt.soft_pending_compaction_bytes_limit;
 
-  auto flush_thread_idle_list = *env_->GetThreadPoolWaitingTime(Env::HIGH);
-  auto compaction_thread_idle_list = *env_->GetThreadPoolWaitingTime(Env::LOW);
-  std::unordered_map<int, uint64_t> thread_idle_time;
-  uint64_t temp = flush_thread_idle_list.size();
-  for (uint64_t i = last_flush_thread_len; i < temp; i++) {
-    auto temp_entry = flush_thread_idle_list[i];
-    auto value = temp_entry.second;
-    current_score.flush_idle_time += value;
-  }
-  temp = compaction_thread_idle_list.size();
-  for (uint64_t i = last_compaction_thread_len; i < temp; i++) {
-    auto temp_entry = compaction_thread_idle_list[i];
-    auto value = temp_entry.second;
-    current_score.compaction_idle_time += value;
-  }
-  int flush_thread_num = current_opt.max_background_jobs / 4 + 1;
+  auto flush_current_idle_time = env_->GetThreadPoolWaitingTime(Env::HIGH);
+  auto compaction_current_wait_time = env_->GetThreadPoolWaitingTime(Env::LOW);
+
+  int flush_thread_num = (current_opt.max_background_jobs + 1) / 4;
   current_score.flush_idle_time /= (double)(current_opt.max_background_jobs *
                                             flush_thread_num * duration_micros);
-  // flush threads always get 1/4 of all
-  current_score.compaction_idle_time /=
-      (double)((current_opt.max_background_jobs - flush_thread_num) *
-               duration_micros);
+  auto num_new_compaction = compaction_result_length - compaction_list_accessed;
 
+  //  current_score.flush_idle_time = flush_current_idle_time;
+  //  current_score.average_cpu_utils = compaction_current_wait_time;
+
+  init_cpu_processing();
+  current_score.average_cpu_utils = GetCurrentValue();
   // clean up
   flush_list_accessed = flush_result_length;
   compaction_list_accessed = compaction_result_length;
-  last_compaction_thread_len = compaction_thread_idle_list.size();
-  last_flush_thread_len = flush_thread_idle_list.size();
 
   last_micros = env_->NowMicros();
   return current_score;
@@ -354,8 +351,6 @@ DOTA_Tuner::DOTA_Tuner(const Options opt, DBImpl *running_db,
       compaction_list_from_opt_ptr(
           running_db->immutable_db_options().job_stats),
       max_scores(),
-      last_flush_thread_len(0),
-      last_compaction_thread_len(0),
       env_(env),
       tuning_gap(gap_sec),
       start_micros(env->NowMicros()),
@@ -387,8 +382,7 @@ SystemScores SystemScores::operator-(const SystemScores &a) {
   temp.estimate_compaction_bytes =
       this->estimate_compaction_bytes - a.estimate_compaction_bytes;
   temp.disk_bandwidth = this->disk_bandwidth - a.disk_bandwidth;
-  temp.compaction_idle_time =
-      this->compaction_idle_time - a.compaction_idle_time;
+  temp.average_cpu_utils = this->average_cpu_utils - a.average_cpu_utils;
   temp.flush_idle_time = this->flush_idle_time - a.flush_idle_time;
   temp.flush_gap_time = this->flush_gap_time - a.flush_gap_time;
   temp.flush_numbers = this->flush_numbers - a.flush_numbers;
@@ -409,8 +403,7 @@ SystemScores SystemScores::operator+(const SystemScores &a) {
   temp.estimate_compaction_bytes =
       this->estimate_compaction_bytes + a.estimate_compaction_bytes;
   temp.disk_bandwidth = this->disk_bandwidth + a.disk_bandwidth;
-  temp.compaction_idle_time =
-      this->compaction_idle_time + a.compaction_idle_time;
+  temp.average_cpu_utils = this->average_cpu_utils + a.average_cpu_utils;
   temp.flush_idle_time = this->flush_idle_time + a.flush_idle_time;
   temp.flush_gap_time = this->flush_gap_time + a.flush_gap_time;
   return temp;
@@ -426,7 +419,7 @@ SystemScores SystemScores::operator/(const int &a) {
   temp.l0_drop_ratio = this->l0_drop_ratio / a;
   temp.estimate_compaction_bytes = this->estimate_compaction_bytes / a;
   temp.disk_bandwidth = this->disk_bandwidth / a;
-  temp.compaction_idle_time = this->compaction_idle_time / a;
+  temp.average_cpu_utils = this->average_cpu_utils / a;
   temp.flush_idle_time = this->flush_idle_time / a;
 
   temp.flush_speed_avg = this->flush_numbers == 0
@@ -470,14 +463,13 @@ void FEAT_Tuner::DetectTuningOperations(int /*secs_elapsed*/,
   //
   //  std::cout << "Flush idle: " << current_score_.flush_idle_time << "/"
   //            << avg_scores.flush_idle_time << " ratio: "
-  //            << current_score.flush_idle_time / avg_scores.flush_idle_time
+  //            << current_score_.flush_idle_time / avg_scores.flush_idle_time
   //            << std::endl;
-  //  if (avg_scores.compaction_idle_time > 0) {
-  //    std::cout << "Compaction idle: " << current_score_.compaction_idle_time
-  //              << "/" << avg_scores.compaction_idle_time << "idle ratio: "
-  //              << current_score.compaction_idle_time /
-  //                     avg_scores.compaction_idle_time
-  //              << std::endl;
+  //  if (avg_scores.average_cpu_utils > 0) {
+  std::cout << "Compaction idle: " << current_score_.average_cpu_utils << "/"
+            << avg_scores.average_cpu_utils << "idle ratio: "
+            << current_score_.average_cpu_utils / avg_scores.average_cpu_utils
+            << std::endl;
   //}
 
   // For FEAT 9, the flush speed is always larger than 0
@@ -502,16 +494,14 @@ SystemScores FEAT_Tuner::normalize(SystemScores &origin_score) {
 TuningOP FEAT_Tuner::TuneByTEA() {
   // the flushing speed is low.
   TuningOP result{kKeep, kLinearIncrease};
-  if (current_score_.flush_min <= max_scores.flush_speed_avg * TEA_slow_flush ||
-      avg_scores.flush_speed_avg <=
-          max_scores.flush_speed_avg * TEA_slow_flush) {
+
+  if (current_score_.flush_min <= avg_scores.flush_speed_avg * TEA_slow_flush) {
     result.ThreadOp = kHalf;
     std::cout << "slow flush, decrease thread" << std::endl;
   }
 
-  if (current_score_.compaction_idle_time / avg_scores.compaction_idle_time >
-          idle_threshold ||
-      current_score_.compaction_idle_time == 0) {
+  if (current_score_.average_cpu_utils / avg_scores.average_cpu_utils <
+      idle_threshold) {
     result.ThreadOp = kHalf;
     std::cout << "idle threads, thread decrease" << std::endl;
   }
@@ -522,24 +512,17 @@ TuningOP FEAT_Tuner::TuneByTEA() {
     std::cout << "lo/ro, increase thread" << std::endl;
   }
 
-  //
-  //  std::cout << current_score_.flush_speed_avg << "/"
-  //            << avg_scores.flush_speed_avg << std::endl;
-
   return result;
 }
 
 TuningOP FEAT_Tuner::TuneByFEA() {
-  TuningOP negative_protocol{kKeep, kKeep};
+  TuningOP negative_protocol{kLinearIncrease, kKeep};
 
-  if (current_score_.compaction_idle_time > idle_threshold) {
-    negative_protocol.BatchOp = kHalf;
-    std::cout << "idle threads, reduce batch" << std::endl;
-  }
-
-  if (current_score_.immutable_number >= 1) {
+  if (current_score_.memtable_speed <
+          avg_scores.memtable_speed * slow_down_threshold ||
+      current_score_.immutable_number >= 1) {
     negative_protocol.BatchOp = kLinearIncrease;
-    std::cout << "slow flushing, increase" << std::endl;
+    std::cout << "slow flushing, increase batch" << std::endl;
   }
 
   if (current_score_.estimate_compaction_bytes >= 1 ||
@@ -548,10 +531,11 @@ TuningOP FEAT_Tuner::TuneByFEA() {
     std::cout << "lo/ro increase" << std::endl;
   }
 
-  //  if (current_score_.flush_idle_time > idle_threshold * 0.2) {
-  //    negative_protocol.BatchOp = kHalf;
-  //    std::cout << "flush is idle, keep the threads" << std::endl;
-  //  }
+  if (current_score_.average_cpu_utils / avg_scores.average_cpu_utils <
+      idle_threshold) {
+    negative_protocol.BatchOp = kHalf;
+    std::cout << "idle threads, reduce batch" << std::endl;
+  }
   return negative_protocol;
 }
 void FEAT_Tuner::CalculateAvgScore() {
@@ -623,5 +607,45 @@ Status FEAT_Tuner::ApplyChangePoints(std::vector<ChangePoint> *points) {
   return s.OK();
 }
 bool FEAT_Tuner::IsBusy() { return applying_changes; }
+
+void DOTA_Tuner::init_cpu_processing() {
+  FILE *file;
+  struct tms timeSample;
+  char line[128];
+
+  lastCPU = times(&timeSample);
+  lastSysCPU = timeSample.tms_stime;
+  lastUserCPU = timeSample.tms_utime;
+
+  file = fopen("/proc/cpuinfo", "r");
+  numProcessors = 0;
+  while (fgets(line, 128, file) != NULL) {
+    if (strncmp(line, "processor", 9) == 0) numProcessors++;
+  }
+  fclose(file);
+}
+double DOTA_Tuner::GetCurrentValue() {
+  struct tms timeSample;
+  clock_t now;
+  double percent;
+
+  now = times(&timeSample);
+  if (now <= lastCPU || timeSample.tms_stime < lastSysCPU ||
+      timeSample.tms_utime < lastUserCPU) {
+    // Overflow detection. Just skip this value.
+    percent = -1.0;
+  } else {
+    percent = (timeSample.tms_stime - lastSysCPU) +
+              (timeSample.tms_utime - lastUserCPU);
+    percent /= (now - lastCPU);
+    percent /= numProcessors;
+    percent *= 100;
+  }
+  lastCPU = now;
+  lastSysCPU = timeSample.tms_stime;
+  lastUserCPU = timeSample.tms_utime;
+
+  return percent;
+}
 
 }  // namespace ROCKSDB_NAMESPACE

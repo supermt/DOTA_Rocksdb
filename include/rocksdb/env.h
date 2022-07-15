@@ -532,9 +532,8 @@ class Env {
   virtual std::string GetThreadPoolTimeStateString() {
     return "haven't been implemented";
   }
-  virtual std::vector<std::pair<size_t, uint64_t>>* GetThreadPoolWaitingTime(
-      Env::Priority /*priority*/) {
-    return nullptr;
+  virtual double GetThreadPoolWaitingTime(Env::Priority /*priority*/) {
+    return 0;
   }
 
   // OptimizeForCompactionTableWrite will create a new EnvOptions object that is

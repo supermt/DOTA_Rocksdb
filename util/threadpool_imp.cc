@@ -51,9 +51,7 @@ struct ThreadPoolImpl::Impl {
   void SetBackgroundThreadsInternal(int num, bool allow_reduce);
   int GetBackgroundThreads();
 
-  std::vector<std::pair<size_t, uint64_t>>* GetThreadPoolWaiting() {
-    return &this->thread_waiting_time;
-  };
+  uint64_t GetThreadPoolWaiting() { return this->thread_waiting_time; };
   std::string GetThreadPoolTiming() {
     std::stringstream ss;
     ss << "timestamp (micros) of each thread creating\n";
@@ -61,13 +59,7 @@ struct ThreadPoolImpl::Impl {
     for (auto pair : thread_creating_time) {
       ss << "" << pair.first << " : " << pair.second << "\n";
     }
-    ss << "micro seconds waiting for next mission"
-       << "\n";
-
-    for (auto pair : thread_waiting_time) {
-      ss << pair.first << " : " << pair.second << "\n";
-    }
-    ss << "\n";
+    ss << "micro seconds waiting in total" << thread_waiting_time << "\n";
     return ss.str();
   }
   unsigned int GetQueueLen() const {
@@ -115,10 +107,10 @@ struct ThreadPoolImpl::Impl {
   // Set the thread priority.
   void SetThreadPriority(Env::Priority priority) { priority_ = priority; }
 
-  std::vector<std::pair<size_t, uint64_t>> thread_waiting_time;
+  uint64_t thread_waiting_time;
   std::vector<std::pair<std::string, uint64_t>> thread_creating_time;
 
- private:
+ public:
   static void BGThreadWrapper(void* arg);
 
   bool low_io_priority_;
@@ -146,9 +138,9 @@ struct ThreadPoolImpl::Impl {
   std::vector<port::Thread> bgthreads_;
 };
 
-std::vector<std::pair<size_t, uint64_t>>*
-ThreadPoolImpl::GetThreadWaitingTime() {
-  return &impl_->thread_waiting_time;
+double ThreadPoolImpl::GetThreadWaitingTime() {
+  //  return impl_->thread_waiting_time;
+  return this->impl_->queue_.size() / this->impl_->total_threads_limit_;
 }
 std::vector<std::pair<std::string, uint64_t>>*
 ThreadPoolImpl::GetThreadCreatingTime() {
@@ -214,15 +206,18 @@ void ThreadPoolImpl::Impl::BGThread(size_t thread_id) {
 
   while (true) {
     // Wait until there is an item that is ready to run
-    std::unique_lock<std::mutex> lock(mu_);
-    // Stop waiting if the thread needs to do work or needs to terminate.
     uint64_t before_waiting = env_->NowMicros();
+
+    std::unique_lock<std::mutex> lock(mu_);
+    uint64_t waiting_time;
+    // Stop waiting if the thread needs to do work or needs to terminate.
     while (!exit_all_threads_ && !IsLastExcessiveThread(thread_id) &&
            (queue_.empty() || IsExcessiveThread(thread_id))) {
+      waiting_time = env_->NowMicros() - before_waiting;
       bgsignal_.wait(lock);
     }
-    uint64_t waiting_time = env_->NowMicros() - before_waiting;
-    thread_waiting_time.emplace_back(thread_id, waiting_time);
+
+    thread_waiting_time += waiting_time;
 
     if (exit_all_threads_) {  // mechanism to let BG threads exit safely
 
@@ -316,16 +311,6 @@ void ThreadPoolImpl::Impl::BGThreadWrapper(void* arg) {
     case Env::Priority::HIGH:
       thread_type = ThreadStatus::HIGH_PRIORITY;
       break;
-    // add by jinghuan
-    //    case Env::L1:
-    //      thread_type = ThreadStatus::L1;
-    //      break;
-    //    case Env::DEEP_COMPACT:
-    //      thread_type = ThreadStatus::DEEP_COMPACT;
-    //      break;
-    //    case Env::L0:
-    //      thread_type = ThreadStatus::L0;
-    //      break;
     case Env::Priority::LOW:
       thread_type = ThreadStatus::LOW_PRIORITY;
       break;

@@ -365,15 +365,6 @@ class PosixEnv : public CompositeEnvWrapper {
     return dummy;
   }
 
-  std::vector<std::pair<size_t, uint64_t>> GetThreadWaitingTime() {
-    std::vector<std::pair<size_t, uint64_t>> results;
-    for (uint64_t i = 0; i < thread_pools_.size(); i++) {
-      auto waiting_time_list = thread_pools_[i].GetThreadWaitingTime();
-      results.insert(results.end(), waiting_time_list->begin(),
-                     waiting_time_list->end());
-    }
-    return results;
-  }
   std::vector<std::pair<std::string, uint64_t>> GetThreadCreatingTime() {
     std::vector<std::pair<std::string, uint64_t>> results;
     for (uint64_t i = 0; i < thread_pools_.size(); i++) {
@@ -392,8 +383,7 @@ class PosixEnv : public CompositeEnvWrapper {
     }
     return ss.str();
   }
-  std::vector<std::pair<size_t, uint64_t>>* GetThreadPoolWaitingTime(
-      Env::Priority priority) override {
+  double GetThreadPoolWaitingTime(Env::Priority priority) override {
     assert(priority >= Priority::BOTTOM && priority <= Priority::HIGH);
     return thread_pools_[priority].GetThreadWaitingTime();
   }

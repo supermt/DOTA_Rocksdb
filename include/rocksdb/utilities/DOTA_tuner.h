@@ -46,7 +46,7 @@ struct SystemScores {
   double disk_bandwidth;  // avg
   double flush_idle_time;
   double flush_gap_time;
-  double compaction_idle_time;  // calculate by idle calculating,flush and
+  double average_cpu_utils;  // calculate by idle calculating,flush and
                                 // compaction stats separately
   int flush_numbers;
 
@@ -61,7 +61,7 @@ struct SystemScores {
     l0_drop_ratio = 0.0;
     estimate_compaction_bytes = 0.0;
     disk_bandwidth = 0.0;
-    compaction_idle_time = 0.0;
+    average_cpu_utils = 0.0;
     flush_numbers = 0;
     flush_gap_time = 0;
   }
@@ -76,7 +76,7 @@ struct SystemScores {
     l0_drop_ratio = 0.0;
     estimate_compaction_bytes = 0.0;
     disk_bandwidth = 0.0;
-    compaction_idle_time = 0.0;
+    average_cpu_utils = 0.0;
     flush_numbers = 0;
     flush_gap_time = 0;
   }
@@ -119,8 +119,6 @@ class DOTA_Tuner {
   std::shared_ptr<std::vector<QuicksandMetrics>> compaction_list_from_opt_ptr;
   SystemScores max_scores;
   SystemScores avg_scores;
-  uint64_t last_flush_thread_len;
-  uint64_t last_compaction_thread_len;
   Env* env_;
   double tuning_gap;
   int double_ratio = 2;
@@ -132,6 +130,10 @@ class DOTA_Tuner {
   const uint64_t start_micros;
   uint64_t last_micros = 0;
 
+  void init_cpu_processing();
+  double GetCurrentValue();
+  clock_t lastCPU, lastSysCPU, lastUserCPU;
+  int numProcessors;
   void UpdateSystemStats() { UpdateSystemStats(running_db_); }
 
  public:
@@ -189,8 +191,8 @@ class DOTA_Tuner {
     if (current_score.flush_idle_time > max_scores.flush_idle_time) {
       max_scores.flush_idle_time = current_score.flush_idle_time;
     }
-    if (current_score.compaction_idle_time > max_scores.compaction_idle_time) {
-      max_scores.compaction_idle_time = current_score.compaction_idle_time;
+    if (current_score.average_cpu_utils > max_scores.average_cpu_utils) {
+      max_scores.average_cpu_utils = current_score.average_cpu_utils;
     }
     if (current_score.flush_numbers > max_scores.flush_numbers) {
       max_scores.flush_numbers = current_score.flush_numbers;
