@@ -125,7 +125,7 @@ class DOTA_Tuner {
   double tuning_gap;
   int double_ratio = 2;
   uint64_t last_unflushed_bytes = 0;
-  const int score_array_len = 600 / tuning_gap;
+  const int score_array_len = 10;
   double idle_threshold = 2.5;
   double FEA_gap_threshold = 1;
   double TEA_slow_flush = 0.5;

@@ -107,14 +107,13 @@ SystemScores DOTA_Tuner::ScoreTheSystem() {
     flush_metric_list.push_back(temp);
     current_score.flush_speed_avg += temp.write_out_bandwidth;
     current_score.disk_bandwidth += temp.total_bytes;
+    current_score.memtable_speed += temp.total_bytes;
     current_score.flush_min =
         std::min(current_score.flush_min, temp.write_out_bandwidth);
     if (i > 1)
       current_score.flush_gap_time +=
           (temp.start_time - flush_list_from_opt_ptr->at(i - 1).start_time);
 
-    //        (double)(current_opt.write_buffer_size >> 20) /
-    //                                 (current_score.memtable_speed + 1);
     if (current_score.l0_num > temp.l0_files) {
       current_score.l0_num = temp.l0_files;
     }
@@ -128,15 +127,12 @@ SystemScores DOTA_Tuner::ScoreTheSystem() {
   while (total_mem_size < last_unflushed_bytes) {
     total_mem_size += current_opt.write_buffer_size;
   }
-  current_score.memtable_speed += (total_mem_size - last_unflushed_bytes);
-
+  current_score.memtable_speed += (active_mem);
   current_score.memtable_speed /= duration_micros;  // MiB
-  //  current_score.memtable_speed /= kMicrosInSecond;  // we use MiB to
-  //  calculate
+  last_unflushed_bytes = total_mem_size;
 
   uint64_t max_pending_bytes = 0;
 
-  last_unflushed_bytes = total_mem_size;
   for (uint64_t i = compaction_list_accessed; i < compaction_result_length;
        i++) {
     auto temp = compaction_list_from_opt_ptr->at(i);
@@ -451,12 +447,12 @@ void FEAT_Tuner::DetectTuningOperations(int /*secs_elapsed*/,
                                         std::vector<ChangePoint> *change_list) {
   //   first, we tune only when the flushing speed is slower than before
   //  UpdateSystemStats();
-  auto current_score = this->ScoreTheSystem();
-  scores.push_back(current_score);
+  current_score_ = this->ScoreTheSystem();
+  scores.push_back(current_score_);
   if (scores.size() == 1) {
     return;
   }
-  this->UpdateMaxScore(current_score);
+  this->UpdateMaxScore(current_score_);
   if (scores.size() >= (size_t)this->score_array_len) {
     // remove the first record
     scores.pop_front();
@@ -464,10 +460,9 @@ void FEAT_Tuner::DetectTuningOperations(int /*secs_elapsed*/,
   CalculateAvgScore();
   //
   //  current_score_ = current_score;
-  //  std::cout << "Memtable: " << current_score_.memtable_speed << "/"
-  //            << avg_scores.memtable_speed << " / " <<
-  //            max_scores.memtable_speed
-  //            << std::endl;
+  std::cout << "Memtable: " << current_score_.memtable_speed << "/"
+            << avg_scores.memtable_speed << " / " << max_scores.memtable_speed
+            << std::endl;
   //
   //  std::cout << "Flush speed: " << current_score_.flush_speed_avg << "/"
   //            << avg_scores.flush_speed_avg << max_scores.flush_speed_avg
@@ -487,15 +482,17 @@ void FEAT_Tuner::DetectTuningOperations(int /*secs_elapsed*/,
 
   // For FEAT 9, the flush speed is always larger than 0
   //<=avg_scores.memtable_speed * TEA_slow_flush) {
-  TuningOP result{kKeep, kKeep};
-  if (TEA_enable) {
-    result = TuneByTEA();
+  if (current_score_.memtable_speed < avg_scores.memtable_speed * 0.5) {
+    TuningOP result{kKeep, kKeep};
+    if (TEA_enable) {
+      result = TuneByTEA();
+    }
+    if (FEA_enable) {
+      TuningOP fea_result = TuneByFEA();
+      result.BatchOp = fea_result.BatchOp;
+    }
+    FillUpChangeList(change_list, result);
   }
-  if (FEA_enable) {
-    TuningOP fea_result = TuneByFEA();
-    result.BatchOp = fea_result.BatchOp;
-  }
-  FillUpChangeList(change_list, result);
 }
 
 SystemScores FEAT_Tuner::normalize(SystemScores &origin_score) {
