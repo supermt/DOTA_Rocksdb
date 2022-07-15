@@ -430,9 +430,6 @@ void FEAT_Tuner::DetectTuningOperations(int /*secs_elapsed*/,
   //   first, we tune only when the flushing speed is slower than before
   //  UpdateSystemStats();
   tuning_rounds++;
-  if (tuning_rounds % skip != 0) {
-    return;
-  }
   current_score_ = this->ScoreTheSystem();
   scores.push_back(current_score_);
   if (scores.size() == 1) {
@@ -446,14 +443,14 @@ void FEAT_Tuner::DetectTuningOperations(int /*secs_elapsed*/,
   CalculateAvgScore();
   //
   //  current_score_ = current_score;
-  std::cout << "Memtable: " << current_score_.memtable_speed << "/"
+  std::cout << "Memtable speed: " << current_score_.memtable_speed << "/"
             << avg_scores.memtable_speed << " / " << max_scores.memtable_speed
             << std::endl;
-  //
-  //  std::cout << "Flush speed: " << current_score_.flush_speed_avg << "/"
-  //            << avg_scores.flush_speed_avg << max_scores.flush_speed_avg
-  //            << std::endl;
-  //
+
+  std::cout << "Flush speed: " << current_score_.flush_speed_avg << "/"
+            << avg_scores.flush_speed_avg << max_scores.flush_speed_avg
+            << std::endl;
+
   //  std::cout << "Flush idle: " << current_score_.flush_idle_time << "/"
   //            << avg_scores.flush_idle_time << " ratio: "
   //            << current_score_.flush_idle_time / avg_scores.flush_idle_time
@@ -632,7 +629,6 @@ double DOTA_Tuner::GetCurrentValue() {
       timeSample.tms_utime < lastUserCPU) {
     // Overflow detection. Just skip this value.
     percent = 1.0;
-    skip++;
   } else {
     percent = (timeSample.tms_stime - lastSysCPU) +
               (timeSample.tms_utime - lastUserCPU);

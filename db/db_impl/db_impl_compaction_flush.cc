@@ -138,8 +138,12 @@ Status DetectChanges(FEAT_Tuner* tuner) {
   Status s;
   if (tuner->IsBusy()) {
     std::cout << "applying changes" << std::endl;
-    return s.Busy();
+    return s.Busy("Another tuner is working");
   }
+  if (tuner->env_->NowMicros() - tuner->last_micros < kMicrosInSecond) {
+    return s.Busy("Tuner working too frequently");
+  }
+
   std::vector<ChangePoint> change_points;
   tuner->DetectTuningOperations(-1, &change_points);
   s = tuner->ApplyChangePoints(&change_points);

@@ -99,7 +99,7 @@ struct TuningOP {
   OpType ThreadOp;
 };
 class DOTA_Tuner {
- protected:
+ public:
   const Options default_opts;
   uint64_t tuning_rounds;
   Options current_opt;
@@ -129,7 +129,6 @@ class DOTA_Tuner {
   double TEA_slow_flush = 0.5;
   const uint64_t start_micros;
   uint64_t last_micros = 0;
-  int skip = 1;
 
   void init_cpu_processing();
   double GetCurrentValue();
