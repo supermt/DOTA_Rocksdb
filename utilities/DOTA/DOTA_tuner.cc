@@ -438,8 +438,7 @@ SystemScores FEAT_Tuner::normalize(SystemScores &origin_score) {
 TuningOP FEAT_Tuner::TuneByTEA() {
   // the flushing speed is low.
   TuningOP result{kKeep, kKeep};
-  if (current_score_.immutable_number >= 1 &&
-      current_score_.flush_speed_avg != 0) {
+  if (current_score_.immutable_number >= 1) {
     result.ThreadOp = kLinearIncrease;
   }
   if (current_score_.flush_min < avg_scores.flush_speed_avg * TEA_slow_flush) {
