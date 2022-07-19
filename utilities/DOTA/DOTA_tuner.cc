@@ -100,8 +100,8 @@ SystemScores DOTA_Tuner::ScoreTheSystem() {
     if (i > 1)
       current_score.flush_gap_time +=
           (temp.start_time - flush_list_from_opt_ptr->at(i - 1).start_time);
-    
-    last_non_zero_flush=temp.write_out_bandwidth;
+
+    last_non_zero_flush = temp.write_out_bandwidth;
     //        (double)(current_opt.write_buffer_size >> 20) /
     //                                 (current_score.memtable_speed + 1);
     if (current_score.l0_num > temp.l0_files) {
@@ -181,7 +181,7 @@ SystemScores DOTA_Tuner::ScoreTheSystem() {
   // flush threads always get 1/4 of all
   current_score.compaction_idle_time /=
       (current_opt.max_background_jobs * kMicrosInSecond * 3 / 4);
-  
+
   // clean up
   flush_list_accessed = flush_result_length;
   compaction_list_accessed = compaction_result_length;
@@ -436,28 +436,27 @@ SystemScores FEAT_Tuner::normalize(SystemScores &origin_score) {
 TuningOP FEAT_Tuner::TuneByTEA() {
   // the flushing speed is low.
   TuningOP result{kKeep, kLinearIncrease};
-  if (current_score_.flush_speed_avg ==0 ){ 
-        current_score_.flush_speed_avg = last_non_zero_flush;
+  if (current_score_.flush_speed_avg == 0) {
+    current_score_.flush_speed_avg = last_non_zero_flush;
   }
   //  if (current_score_.immutable_number >= 1) {
   //    //      &&      current_score_.flush_speed_avg != 0) {
   //    result.ThreadOp = kLinearIncrease;
   //  }
-  if (current_score_.memtable_speed > 
-      current_score_.flush_speed_avg * TEA_slow_flush || current_score_.memtable_speed == 0) {
-
+  if (current_score_.flush_speed_avg <
+      avg_scores.flush_speed_avg * TEA_slow_flush) {
     result.ThreadOp = kHalf;
-    std::cout << "slow flush decrease, thread" << std::endl;
+    std::cout << "slow flush, decrease thread" << std::endl;
   }
 
   if (current_score_.compaction_idle_time > idle_threshold) {
     result.ThreadOp = kHalf;
-    std::cout << "idle threads decrease, thread" << std::endl;
+    std::cout << "idle threads, decrease thread" << std::endl;
   }
 
-  if (current_score_.estimate_compaction_bytes >= 1 || current_score_.l0_num >=1) {
+  if (current_score_.estimate_compaction_bytes >= 1) {
     result.ThreadOp = kLinearIncrease;
-    std::cout << "lo/ro increase, thread" << std::endl;
+    std::cout << "ro increase, thread" << std::endl;
   }
 
   //
@@ -476,20 +475,20 @@ TuningOP FEAT_Tuner::TuneByFEA() {
   }
 
   if (current_score_.memtable_speed >
-      current_score_.flush_speed_avg * TEA_slow_flush || current_score_.immutable_number>1) {
+          current_score_.flush_speed_avg * TEA_slow_flush ||
+      current_score_.immutable_number > 1) {
     negative_protocol.BatchOp = kLinearIncrease;
-    std::cout << "slow flushing, increase" << std::endl;
+    std::cout << "slow flushing, increase batch" << std::endl;
   }
 
-  if (current_score_.estimate_compaction_bytes >= 1 ||
-      current_score_.l0_num >= 1) {
-    negative_protocol.BatchOp = kLinearIncrease;
-    std::cout << "lo/ro increase" << std::endl;
+  if (current_score_.estimate_compaction_bytes >= 1) {
+    negative_protocol.BatchOp = kHalf;
+    std::cout << "lo, increase batch" << std::endl;
   }
 
-  if (current_score_.flush_idle_time > idle_threshold*0.2) {
-    negative_protocol.BatchOp = kKeep;
-    std::cout << "flush is idle, keep the threads" << std::endl;
+  if (current_score_.estimate_compaction_bytes >= 1) {
+    negative_protocol.BatchOp = kLinearIncrease;
+    std::cout << "ro, increase batch" << std::endl;
   }
   return negative_protocol;
 }
