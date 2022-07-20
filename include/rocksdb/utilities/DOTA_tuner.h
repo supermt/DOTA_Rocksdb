@@ -30,6 +30,7 @@ struct SystemScores {
   int immutable_number;      // NonFlush number
   // Flushing
   double flush_speed_avg;
+  double flush_min;
   double flush_speed_var;
   // Compaction speed
   double l0_num;
@@ -50,6 +51,7 @@ struct SystemScores {
     active_size_ratio = 0.0;
     immutable_number = 0;
     flush_speed_avg = 0.0;
+    flush_min = 9999999;
     flush_speed_var = 0.0;
     l0_num = 0.0;
     l0_drop_ratio = 0.0;
@@ -122,7 +124,7 @@ class DOTA_Tuner {
   double idle_threshold = 2.5;
   double FEA_gap_threshold = 1;
   double TEA_slow_flush = 0.5;
-  uint64_t last_non_zero_flush=0;
+  uint64_t last_non_zero_flush = 0;
   void UpdateSystemStats() { UpdateSystemStats(running_db_); }
 
  public:

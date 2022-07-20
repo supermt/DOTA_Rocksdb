@@ -94,6 +94,8 @@ SystemScores DOTA_Tuner::ScoreTheSystem() {
 
   for (uint64_t i = flush_list_accessed; i < flush_result_length; i++) {
     auto temp = flush_list_from_opt_ptr->at(i);
+    current_score.flush_min =
+        std::min(current_score.flush_speed_avg, current_score.flush_min);
     flush_metric_list.push_back(temp);
     current_score.flush_speed_avg += temp.write_out_bandwidth;
     current_score.disk_bandwidth += temp.total_bytes;
@@ -435,16 +437,12 @@ SystemScores FEAT_Tuner::normalize(SystemScores &origin_score) {
 
 TuningOP FEAT_Tuner::TuneByTEA() {
   // the flushing speed is low.
-  TuningOP result{kKeep, kLinearIncrease};
-  if (current_score_.flush_speed_avg == 0) {
-    current_score_.flush_speed_avg = last_non_zero_flush;
+  TuningOP result{kKeep, kKeep};
+  if (current_score_.immutable_number >= 1 &&
+      current_score_.flush_speed_avg != 0) {
+    result.ThreadOp = kLinearIncrease;
   }
-  //  if (current_score_.immutable_number >= 1) {
-  //    //      &&      current_score_.flush_speed_avg != 0) {
-  //    result.ThreadOp = kLinearIncrease;
-  //  }
-  if (current_score_.flush_speed_avg <
-      avg_scores.flush_speed_avg * TEA_slow_flush) {
+  if (current_score_.flush_min < avg_scores.flush_speed_avg * TEA_slow_flush) {
     result.ThreadOp = kHalf;
     std::cout << "slow flush, decrease thread" << std::endl;
   }
@@ -482,14 +480,15 @@ TuningOP FEAT_Tuner::TuneByFEA() {
   }
 
   if (current_score_.estimate_compaction_bytes >= 1) {
+    negative_protocol.BatchOp = kLinearIncrease;
+    std::cout << "ro, increase batch" << std::endl;
+  }
+
+  if (current_score_.estimate_compaction_bytes >= 1) {
     negative_protocol.BatchOp = kHalf;
     std::cout << "lo, increase batch" << std::endl;
   }
 
-  if (current_score_.estimate_compaction_bytes >= 1) {
-    negative_protocol.BatchOp = kLinearIncrease;
-    std::cout << "ro, increase batch" << std::endl;
-  }
   return negative_protocol;
 }
 void FEAT_Tuner::CalculateAvgScore() {
